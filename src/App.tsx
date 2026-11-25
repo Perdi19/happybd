@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, Component, ReactNode } from 'react';
+import React, { useState, useEffect, useRef, Component, ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ParticleGarden } from './components/ParticleGarden';
 import { TopBar } from './components/TopBar';
@@ -55,6 +55,8 @@ export default function App() {
   const [currentChapter, setCurrentChapter] = useState<ChapterId>(1);
   const [unlockedChapters, setUnlockedChapters] = useState<number>(1);
   const [isMusicPlaying, setIsMusicPlaying] = useState<boolean>(false);
+  const prevChapterRef = useRef<ChapterId>(1);
+  const shouldRestoreMusicRef = useRef<boolean>(false);
 
   // Check URL params for testing/jumping (?autostart=1 or ?chapter=4)
   useEffect(() => {
@@ -72,12 +74,28 @@ export default function App() {
     }
   }, []);
 
+  // Restore background Happy Birthday piano when leaving Chapter 7 if it was playing beforehand
+  useEffect(() => {
+    const prev = prevChapterRef.current;
+    prevChapterRef.current = currentChapter;
+
+    if (prev === 7 && currentChapter !== 7 && shouldRestoreMusicRef.current) {
+      shouldRestoreMusicRef.current = false;
+      audioEngine.startMelody();
+      setIsMusicPlaying(audioEngine.getMelodyPlaying());
+    }
+  }, [currentChapter]);
+
   const handleToggleMusic = () => {
+    shouldRestoreMusicRef.current = false;
     const newState = audioEngine.toggleMelody();
     setIsMusicPlaying(newState);
   };
 
   const handlePauseMusic = () => {
+    if (audioEngine.getMelodyPlaying()) {
+      shouldRestoreMusicRef.current = true;
+    }
     audioEngine.stopMelody();
     setIsMusicPlaying(false);
   };
