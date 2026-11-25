@@ -1,3 +1,5 @@
+import { withBaseUrl } from '../utils/videoHelpers';
+
 export interface BirthdayConfig {
   recipientName: string;
   puzzleWord: string;
@@ -49,7 +51,7 @@ export const SURPRISE_CONFIG: BirthdayConfig = {
   letterSignature: "بكل محبتي،",
   footerCredit: "صُنع بالقليل من السحر، لأجلكِ وحدكِ. ♡",
   // ضع رابط فيديو (MP4 أو YouTube) أو مساراً مثل "/birthday-video.mp4" بعد وضعه في مجلد public
-  birthdayVideoUrl: "",
+  birthdayVideoUrl: withBaseUrl('happybd.mp4'),
   birthdayVideoTitle: "أغنية عيد ميلادٍ خاصة لياسمين 🎬",
   birthdayVideoSubtitle: "لحنٌ خاص وفيديو عيد ميلادٍ صُمّم ليبقى ذكرى جميلةً لكِ"
 };

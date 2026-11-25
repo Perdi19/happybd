@@ -16,6 +16,7 @@ import { WishesScene } from './components/WishesScene';
 import { LetterScene } from './components/LetterScene';
 import { BirthdayVideoScene } from './components/BirthdayVideoScene';
 import { audioEngine } from './utils/audioEngine';
+import midnightGardenBg from './assets/images/midnight_garden_fairytale_1792848341183.jpg';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -96,7 +97,7 @@ export default function App() {
       {/* 1. Cinematic Enchanted Garden Photographic Backdrop */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <img
-          src="/src/assets/images/midnight_garden_fairytale_1792848341183.jpg"
+          src={midnightGardenBg}
           alt="حديقة منتصف الليل الساحرة"
           className="h-full w-full object-cover opacity-25 scale-105 filter blur-[2px] transition-all duration-1000"
           referrerPolicy="no-referrer"

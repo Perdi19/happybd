@@ -6,6 +6,25 @@ export interface ParsedVideoSource {
 }
 
 /**
+ * Resolves a public asset path against Vite's configured base URL (e.g. "/happybd/").
+ * Falls back safely to "/" when executed in Node unit tests outside Vite.
+ */
+export function withBaseUrl(assetPath: string, baseUrl?: string): string {
+  let viteBase = '/';
+  try {
+    if (typeof import.meta.env.BASE_URL === 'string' && import.meta.env.BASE_URL.length > 0) {
+      viteBase = import.meta.env.BASE_URL;
+    }
+  } catch {
+    viteBase = '/';
+  }
+  const rawBase = baseUrl ?? viteBase;
+  const cleanBase = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
+  const cleanPath = assetPath.replace(/^\/+/, '');
+  return `${cleanBase}${cleanPath}`;
+}
+
+/**
  * Parses a configured or user-provided video URL/path into an embeddable YouTube URL
  * or direct HTML5 video source.
  */
@@ -16,7 +35,7 @@ export function parseVideoSource(input: string): ParsedVideoSource {
   }
 
   // Local blob URLs or relative public paths
-  if (trimmed.startsWith('blob:') || trimmed.startsWith('/')) {
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('/') || trimmed.startsWith('./')) {
     return { type: 'direct', src: trimmed };
   }
 

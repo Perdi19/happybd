@@ -12,6 +12,7 @@ import {
   Music,
   Trash2,
   ArrowRight,
+  Volume2,
 } from 'lucide-react';
 import { SURPRISE_CONFIG } from '../config/surpriseConfig';
 import {
@@ -112,6 +113,9 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   const [uploadedBlobUrl, setUploadedBlobUrl] = useState<string | null>(null);
   const [showUploadDrawer, setShowUploadDrawer] = useState<boolean>(false);
   const [urlError, setUrlError] = useState<string>('');
+  const [autoplayBlockedMuted, setAutoplayBlockedMuted] = useState<boolean>(false);
+  const [autoplayBlockedPlay, setAutoplayBlockedPlay] = useState<boolean>(false);
+  const [videoLoadError, setVideoLoadError] = useState<boolean>(false);
 
   // Built-in musical video state
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -119,6 +123,9 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const onPauseAmbientMusicRef = useRef(onPauseAmbientMusic);
+  onPauseAmbientMusicRef.current = onPauseAmbientMusic;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -158,6 +165,77 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
     : parseVideoSource(customSourceUrl);
 
   const isCustomVideoActive = activeVideoParsed.type !== 'none';
+
+  // Autoplay direct video with sound; gracefully fall back to muted autoplay or manual play if blocked
+  useEffect(() => {
+    setAutoplayBlockedMuted(false);
+    setAutoplayBlockedPlay(false);
+    setVideoLoadError(false);
+
+    if (activeVideoParsed.type !== 'direct' || !activeVideoParsed.src) {
+      return;
+    }
+
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    let cancelled = false;
+
+    const attemptAutoplay = async () => {
+      try {
+        videoEl.muted = false;
+        await videoEl.play();
+        if (!cancelled) {
+          setAutoplayBlockedMuted(false);
+          setAutoplayBlockedPlay(false);
+          onPauseAmbientMusicRef.current();
+        }
+      } catch (err) {
+        if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) {
+          return;
+        }
+        try {
+          videoEl.muted = true;
+          await videoEl.play();
+          if (!cancelled) {
+            setAutoplayBlockedMuted(true);
+            setAutoplayBlockedPlay(false);
+          }
+        } catch (mutedErr) {
+          if (cancelled || (mutedErr instanceof DOMException && mutedErr.name === 'AbortError')) {
+            return;
+          }
+          if (!cancelled) {
+            setAutoplayBlockedMuted(false);
+            setAutoplayBlockedPlay(true);
+          }
+        }
+      }
+    };
+
+    attemptAutoplay();
+
+    return () => {
+      cancelled = true;
+      videoEl.pause();
+    };
+  }, [activeVideoParsed.type, activeVideoParsed.src]);
+
+  const playUnmutedFromUserGesture = async (onlyPlayIfPaused: boolean) => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+    videoEl.muted = false;
+    onPauseAmbientMusicRef.current();
+    setAutoplayBlockedMuted(false);
+    if (!onlyPlayIfPaused || videoEl.paused) {
+      try {
+        await videoEl.play();
+        setAutoplayBlockedPlay(false);
+      } catch {
+        setAutoplayBlockedPlay(true);
+      }
+    }
+  };
 
   const stopAudioNodes = useCallback(() => {
     activeOscsRef.current.forEach((osc) => {
@@ -569,13 +647,13 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   );
 
   return (
-    <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 pt-20 pb-28 text-center overflow-y-auto">
+    <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 pt-16 pb-24 text-center overflow-y-auto">
       {/* Background radial glow */}
       <div className="pointer-events-none absolute h-96 w-96 rounded-full bg-amber-400/10 blur-[120px]" />
 
-      <div className="w-full max-w-3xl mx-auto flex flex-col items-center">
+      <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
         {/* Chapter marker */}
-        <div className="mb-2.5 inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/10 border border-amber-300/30 text-amber-200 text-xs tracking-wide">
+        <div className="mb-2 inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/10 border border-amber-300/30 text-amber-200 text-xs tracking-wide">
           <Sparkles className="w-3.5 h-3.5 text-amber-300" />
           <span>الفصل السابع · فيديو المفاجأة</span>
         </div>
@@ -583,7 +661,7 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
         <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl text-slate-100 font-normal tracking-wide mb-1.5">
           {SURPRISE_CONFIG.birthdayVideoTitle}
         </h2>
-        <p className="text-xs sm:text-sm text-slate-300 font-light mb-5 max-w-lg">
+        <p className="text-xs sm:text-sm text-slate-300 font-light mb-3.5 max-w-lg">
           {SURPRISE_CONFIG.birthdayVideoSubtitle}
         </p>
 
@@ -605,13 +683,71 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
                   allowFullScreen
                 />
               ) : (
-                <video
-                  src={activeVideoParsed.src}
-                  controls
-                  playsInline
-                  onPlay={onPauseAmbientMusic}
-                  className="w-full h-full object-contain bg-black"
-                />
+                <div className="relative w-full h-full">
+                  <video
+                    ref={videoRef}
+                    src={activeVideoParsed.src}
+                    controls
+                    playsInline
+                    preload="auto"
+                    onPlay={() => {
+                      setAutoplayBlockedPlay(false);
+                      if (videoRef.current && !videoRef.current.muted) {
+                        onPauseAmbientMusicRef.current();
+                      }
+                    }}
+                    onVolumeChange={() => {
+                      const el = videoRef.current;
+                      if (!el) return;
+                      if (!el.muted && el.volume > 0) {
+                        setAutoplayBlockedMuted(false);
+                        if (!el.paused) {
+                          onPauseAmbientMusicRef.current();
+                        }
+                      }
+                    }}
+                    onError={() => setVideoLoadError(true)}
+                    className="w-full h-full object-contain bg-black"
+                  />
+
+                  {autoplayBlockedMuted && !videoLoadError && (
+                    <button
+                      type="button"
+                      onClick={() => playUnmutedFromUserGesture(true)}
+                      className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-slate-950 bg-amber-200/95 hover:bg-amber-100 shadow-[0_0_20px_rgba(253,224,71,0.55)] transition-all cursor-pointer"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>تشغيل الصوت</span>
+                    </button>
+                  )}
+
+                  {autoplayBlockedPlay && !videoLoadError && (
+                    <button
+                      type="button"
+                      onClick={() => playUnmutedFromUserGesture(false)}
+                      aria-label="تشغيل فيديو المفاجأة"
+                      className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/35 hover:bg-slate-950/20 transition-colors cursor-pointer group"
+                    >
+                      <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-amber-100 to-amber-300 text-slate-950 shadow-[0_0_30px_rgba(253,224,71,0.65)] group-hover:scale-110 transition-transform">
+                        <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-slate-950 -mr-0.5" />
+                      </div>
+                      <span className="mt-3 px-4 py-1.5 rounded-full bg-slate-950/75 border border-amber-300/30 text-amber-100 font-serif text-sm">
+                        تشغيل فيديو المفاجأة 🎬
+                      </span>
+                    </button>
+                  )}
+
+                  {videoLoadError && (
+                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-4 bg-slate-950/85 text-center">
+                      <p className="text-sm text-rose-200 font-serif mb-1">
+                        تعذّر تحميل ملف الفيديو.
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        تأكّد من توفر الملف في المسار الصحيح أو جرّب رفع فيديو آخر أدناه.
+                      </p>
+                    </div>
+                  )}
+                </div>
               )
             ) : (
               <>
@@ -791,7 +927,7 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
         </motion.div>
 
         {/* Bottom navigation back to Letter or Restart */}
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
             onClick={() => {

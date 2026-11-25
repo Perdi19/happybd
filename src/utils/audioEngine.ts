@@ -8,7 +8,9 @@ class AudioEngine {
   private isMuted: boolean = false;
   private isMelodyPlaying: boolean = false;
   private loopTimer: number | null = null;
+  private noteTimers: number[] = [];
   private masterGain: GainNode | null = null;
+  private melodyGain: GainNode | null = null;
 
   private initContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -42,8 +44,18 @@ class AudioEngine {
   }
 
   public startMelody() {
+    if (this.isMelodyPlaying) return;
     const ctx = this.initContext();
     if (!ctx) return;
+
+    this.melodyGain = ctx.createGain();
+    this.melodyGain.gain.setValueAtTime(1, ctx.currentTime);
+    if (this.masterGain) {
+      this.melodyGain.connect(this.masterGain);
+    } else {
+      this.melodyGain.connect(ctx.destination);
+    }
+
     this.isMelodyPlaying = true;
     this.scheduleNextPhrase();
   }
@@ -53,6 +65,28 @@ class AudioEngine {
     if (this.loopTimer) {
       window.clearTimeout(this.loopTimer);
       this.loopTimer = null;
+    }
+    this.noteTimers.forEach((timerId) => window.clearTimeout(timerId));
+    this.noteTimers = [];
+
+    if (this.melodyGain && this.ctx) {
+      const gainNode = this.melodyGain;
+      this.melodyGain = null;
+      const now = this.ctx.currentTime;
+      try {
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+        gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.15);
+        window.setTimeout(() => {
+          try {
+            gainNode.disconnect();
+          } catch {
+            // Already disconnected
+          }
+        }, 180);
+      } catch {
+        // Ignore audio context state errors
+      }
     }
   }
 
@@ -74,15 +108,18 @@ class AudioEngine {
     const currentChord = chords[Math.floor(Math.random() * chords.length)];
     const pattern = [0, 1, 2, 4, 3, 2, 1, 3];
     const noteDuration = 0.55;
+    const activeMelodyGain = this.melodyGain ?? undefined;
 
+    this.noteTimers = [];
     pattern.forEach((noteIdx, i) => {
       const freq = currentChord[noteIdx % currentChord.length];
       const timeOffset = i * noteDuration * 1000;
-      window.setTimeout(() => {
+      const timerId = window.setTimeout(() => {
         if (this.isMelodyPlaying) {
-          this.playPianoNote(freq, 2.2, 0.16);
+          this.playPianoNote(freq, 2.2, 0.16, activeMelodyGain);
         }
       }, timeOffset);
+      this.noteTimers.push(timerId);
     });
 
     const phraseTotalDuration = pattern.length * noteDuration * 1000 + 400;
@@ -91,7 +128,12 @@ class AudioEngine {
     }, phraseTotalDuration);
   }
 
-  public playPianoNote(freq: number, duration: number = 1.5, volume: number = 0.2) {
+  public playPianoNote(
+    freq: number,
+    duration: number = 1.5,
+    volume: number = 0.2,
+    destinationNode?: GainNode
+  ) {
     const ctx = this.initContext();
     if (!ctx || this.isMuted) return;
 
@@ -122,7 +164,9 @@ class AudioEngine {
     osc1.connect(filter);
     osc2.connect(filter);
     filter.connect(noteGain);
-    if (this.masterGain) {
+    if (destinationNode) {
+      noteGain.connect(destinationNode);
+    } else if (this.masterGain) {
       noteGain.connect(this.masterGain);
     } else {
       noteGain.connect(ctx.destination);

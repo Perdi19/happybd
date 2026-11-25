@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseVideoSource,
+  withBaseUrl,
   formatVideoTime,
   BIRTHDAY_SONG_NOTES,
   BIRTHDAY_SONG_TOTAL_DURATION,
   getBirthdaySongVerses,
 } from './videoHelpers';
+import { SURPRISE_CONFIG } from '../config/surpriseConfig';
 
 test('parseVideoSource handles YouTube watch, short, and direct paths', () => {
   assert.deepEqual(parseVideoSource(''), { type: 'none', src: '' });
@@ -41,4 +43,18 @@ test('BIRTHDAY_SONG_NOTES and verses cover all 4 phrases within duration', () =>
   const verses = getBirthdaySongVerses('ياسمين');
   assert.equal(verses.length, 4);
   assert.ok(verses[2].includes('ياسمين'));
+});
+
+test('withBaseUrl resolves public assets cleanly for root and subpath bases', () => {
+  assert.equal(withBaseUrl('happybd.mp4', '/'), '/happybd.mp4');
+  assert.equal(withBaseUrl('/happybd.mp4', '/happybd/'), '/happybd/happybd.mp4');
+  assert.equal(withBaseUrl('happybd.mp4', '/happybd'), '/happybd/happybd.mp4');
+});
+
+test('SURPRISE_CONFIG configures happybd.mp4 as direct video source', () => {
+  assert.equal(SURPRISE_CONFIG.birthdayVideoUrl, '/happybd.mp4');
+  assert.deepEqual(parseVideoSource(SURPRISE_CONFIG.birthdayVideoUrl), {
+    type: 'direct',
+    src: '/happybd.mp4',
+  });
 });
