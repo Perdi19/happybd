@@ -1,46 +1,104 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createScrambledTiles, isWordComplete, LetterTile } from './puzzleLogic';
+import {
+  PUZZLE_TARGET_WORD,
+  PUZZLE_DECOY_LETTERS,
+  PROGRESSIVE_HINTS,
+  createScrambledTiles,
+  isWordComplete,
+  evaluateAttempt,
+  getUnlockedHints,
+  getRemainingAttemptsForNextHint,
+  LetterTile,
+} from './puzzleLogic';
 
-test('createScrambledTiles preserves all Arabic characters and scrambles the word', () => {
-  const word = 'ياسمين';
-  const tiles = createScrambledTiles(word);
+test('createScrambledTiles creates 10 tiles (7 JASMINE + 3 decoys) in scrambled order', () => {
+  const tiles = createScrambledTiles(PUZZLE_TARGET_WORD, PUZZLE_DECOY_LETTERS);
 
-  assert.equal(tiles.length, 6);
-  const chars = tiles.map(t => t.char).sort().join('');
-  assert.equal(chars, 'ياسمين'.split('').sort().join(''));
+  assert.equal(tiles.length, 10);
+  const targetTiles = tiles.filter((t) => !t.isDecoy);
+  const decoyTiles = tiles.filter((t) => t.isDecoy);
 
-  // Should not be in exact solved order
-  const scrambledStr = tiles.map(t => t.char).join('');
-  assert.notEqual(scrambledStr, word);
+  assert.equal(targetTiles.length, 7);
+  assert.equal(decoyTiles.length, 3);
+  assert.equal(
+    targetTiles.map((t) => t.char).sort().join(''),
+    'JASMINE'.split('').sort().join('')
+  );
+  assert.deepEqual(
+    decoyTiles.map((t) => t.char).sort(),
+    [...PUZZLE_DECOY_LETTERS].sort()
+  );
+
+  // Leading 7 tiles must not spell JASMINE immediately
+  const prefix = tiles
+    .slice(0, PUZZLE_TARGET_WORD.length)
+    .map((t) => t.char)
+    .join('');
+  assert.notEqual(prefix, PUZZLE_TARGET_WORD);
 });
 
-test('isWordComplete correctly checks full Arabic spelling and slots', () => {
-  const word = 'ياسمين';
-  const solvedTiles: (LetterTile | null)[] = [
-    { id: '1', char: 'ي', originalIndex: 0 },
-    { id: '2', char: 'ا', originalIndex: 1 },
-    { id: '3', char: 'س', originalIndex: 2 },
-    { id: '4', char: 'م', originalIndex: 3 },
-    { id: '5', char: 'ي', originalIndex: 4 },
-    { id: '6', char: 'ن', originalIndex: 5 },
-  ];
+test('isWordComplete and evaluateAttempt validate JASMINE and reject incomplete or decoy answers', () => {
+  const solvedTiles: (LetterTile | null)[] = PUZZLE_TARGET_WORD.split('').map((char, idx) => ({
+    id: `tile-${idx}-${char}`,
+    char,
+    originalIndex: idx,
+    isDecoy: false,
+  }));
 
-  assert.equal(isWordComplete(solvedTiles, word), true);
+  assert.equal(isWordComplete(solvedTiles, PUZZLE_TARGET_WORD), true);
+  assert.equal(evaluateAttempt(solvedTiles, PUZZLE_TARGET_WORD), 'solved');
 
   // Incomplete with null slot
   const incompleteTiles: (LetterTile | null)[] = [...solvedTiles];
-  incompleteTiles[2] = null;
-  assert.equal(isWordComplete(incompleteTiles, word), false);
+  incompleteTiles[3] = null;
+  assert.equal(isWordComplete(incompleteTiles, PUZZLE_TARGET_WORD), false);
+  assert.equal(evaluateAttempt(incompleteTiles, PUZZLE_TARGET_WORD), 'incomplete');
 
-  // Wrong spelling
-  const wrongTiles: (LetterTile | null)[] = [
-    { id: '1', char: 'ي', originalIndex: 0 },
-    { id: '2', char: 'ا', originalIndex: 1 },
-    { id: '3', char: 'م', originalIndex: 3 },
-    { id: '4', char: 'س', originalIndex: 2 },
-    { id: '5', char: 'ي', originalIndex: 4 },
-    { id: '6', char: 'ن', originalIndex: 5 },
-  ];
-  assert.equal(isWordComplete(wrongTiles, word), false);
+  // Wrong spelling (swapped letters)
+  const swappedTiles: (LetterTile | null)[] = [...solvedTiles];
+  [swappedTiles[2], swappedTiles[3]] = [swappedTiles[3], swappedTiles[2]];
+  assert.equal(isWordComplete(swappedTiles, PUZZLE_TARGET_WORD), false);
+  assert.equal(evaluateAttempt(swappedTiles, PUZZLE_TARGET_WORD), 'incorrect');
+
+  // Wrong answer containing decoy letter
+  const withDecoyTiles: (LetterTile | null)[] = [...solvedTiles];
+  withDecoyTiles[0] = { id: 'decoy-0-R', char: 'R', originalIndex: 7, isDecoy: true };
+  assert.equal(isWordComplete(withDecoyTiles, PUZZLE_TARGET_WORD), false);
+  assert.equal(evaluateAttempt(withDecoyTiles, PUZZLE_TARGET_WORD), 'incorrect');
+});
+
+test('progressive hints require 3 incorrect attempts for additional hint and reveal J without spoiling full word', () => {
+  // Initial state: only general mysterious hint 1 is unlocked; 3 attempts remain for hint 2
+  const initialHints = getUnlockedHints(0);
+  assert.equal(initialHints.length, 1);
+  assert.equal(initialHints[0].level, 1);
+  assert.equal(initialHints[0].text.includes('JASMINE'), false);
+  assert.equal(getRemainingAttemptsForNextHint(0), 3);
+
+  // After 1 or 2 wrong attempts, additional hint stays locked
+  assert.equal(getUnlockedHints(1).length, 1);
+  assert.equal(getRemainingAttemptsForNextHint(1), 2);
+  assert.equal(getUnlockedHints(2).length, 1);
+  assert.equal(getRemainingAttemptsForNextHint(2), 1);
+
+  // After 3 wrong attempts, second hint unlocks revealing the starting letter J
+  const hintsAtThree = getUnlockedHints(3);
+  assert.equal(hintsAtThree.length, 2);
+  assert.equal(hintsAtThree[1].level, 2);
+  assert.equal(hintsAtThree[1].highlightLetter, 'J');
+  assert.ok(hintsAtThree[1].text.includes('J'));
+  assert.equal(hintsAtThree[1].text.includes('JASMINE'), false);
+
+  // Further hints unlock progressively without spoiling full answer
+  const hintsAtFive = getUnlockedHints(5);
+  assert.equal(hintsAtFive.length, 3);
+  assert.equal(hintsAtFive[2].highlightLetter, 'E');
+
+  const allHints = getUnlockedHints(7);
+  assert.equal(allHints.length, PROGRESSIVE_HINTS.length);
+  assert.equal(getRemainingAttemptsForNextHint(7), null);
+  for (const hint of allHints) {
+    assert.equal(hint.text.includes('JASMINE'), false);
+  }
 });
