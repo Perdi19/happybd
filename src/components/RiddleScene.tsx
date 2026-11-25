@@ -469,10 +469,10 @@ export const RiddleScene: React.FC<RiddleSceneProps> = ({ onSolved }) => {
               </div>
 
               <p
-                dir="ltr"
-                className="font-serif text-lg sm:text-xl md:text-2xl text-amber-50 leading-relaxed tracking-wide text-glow max-w-lg"
+                dir="rtl"
+                className="font-serif text-lg sm:text-xl md:text-2xl text-amber-50 leading-relaxed text-glow max-w-lg"
               >
-                Well done, Jasmine! You&apos;ve discovered the secret... but the real surprise is still waiting for you. ❤️
+                أحسنتِ يا وردة الياسمين عرفتي روحك ! لقد اكتشفتِ السر... لكن المفاجأة الحقيقية ما زالت تنتظركِ. ❤️
               </p>
 
               <p className="text-xs sm:text-sm text-amber-200/80 font-light">
