@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Amiri", Georgia, serif;
+  --font-script: "Aref Ruqaa", "Amiri", serif;
+  --font-sans: "Tajawal", system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #070a14;
+  color: #f1f5f9;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom romantic glow utilities */
+.text-glow {
+  text-shadow: 0 0 15px rgba(254, 240, 138, 0.6), 0 0 30px rgba(253, 224, 71, 0.3);
+}
+
+.text-glow-silver {
+  text-shadow: 0 0 18px rgba(226, 232, 240, 0.7), 0 0 35px rgba(148, 163, 184, 0.4);
+}
+
+.box-glow {
+  box-shadow: 0 0 25px rgba(234, 179, 8, 0.25), inset 0 0 15px rgba(255, 255, 255, 0.1);
+}
+
+.box-glow-silver {
+  box-shadow: 0 0 30px rgba(148, 163, 184, 0.2), inset 0 0 20px rgba(255, 255, 255, 0.05);
+}
+
+/* Botanical stem growth & drawing animations */
+@keyframes drawStem {
+  from {
+    stroke-dashoffset: 600;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes floatGentle {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1.5deg);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.8;
+    filter: drop-shadow(0 0 8px rgba(253, 224, 71, 0.4));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 16px rgba(253, 224, 71, 0.8));
+  }
+}
+
+.animate-float-gentle {
+  animation: floatGentle 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 3s ease-in-out infinite;
+}

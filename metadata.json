@@ -1,0 +1,6 @@
+{
+  "name": "حكاية ميلاد ساحرة لياسمين",
+  "description": "رسالة حب رقمية ساحرة ومفاجأة زهرة الياسمين المتفتحة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
