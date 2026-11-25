@@ -70,7 +70,7 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
   ];
 
   return (
-    <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 pt-10 pb-20 text-center overflow-hidden">
+    <div className="relative z-10 flex w-full flex-col items-center justify-center px-4 py-4 text-center overflow-hidden">
       {/* Background radial candlelight glow */}
       <div className="pointer-events-none absolute top-1/4 h-80 w-80 rounded-full bg-amber-400/15 blur-[100px]" />
 

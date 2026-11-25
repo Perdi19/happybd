@@ -13,6 +13,9 @@ import {
   Trash2,
   ArrowRight,
   Volume2,
+  Maximize2,
+  Minimize2,
+  Clapperboard,
 } from 'lucide-react';
 import { SURPRISE_CONFIG } from '../config/surpriseConfig';
 import {
@@ -116,6 +119,8 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   const [autoplayBlockedMuted, setAutoplayBlockedMuted] = useState<boolean>(false);
   const [autoplayBlockedPlay, setAutoplayBlockedPlay] = useState<boolean>(false);
   const [videoLoadError, setVideoLoadError] = useState<boolean>(false);
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState<boolean>(false);
+  const [isTheaterExpanded, setIsTheaterExpanded] = useState<boolean>(false);
 
   // Built-in musical video state
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -123,6 +128,7 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const onPauseAmbientMusicRef = useRef(onPauseAmbientMusic);
   onPauseAmbientMusicRef.current = onPauseAmbientMusic;
@@ -165,6 +171,118 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
     : parseVideoSource(customSourceUrl);
 
   const isCustomVideoActive = activeVideoParsed.type !== 'none';
+  const isExpandedView = isNativeFullscreen || isTheaterExpanded;
+
+  // Sync fullscreen state across standard, webkit, and iOS video fullscreen events
+  useEffect(() => {
+    const syncFullscreen = () => {
+      const doc = document as Document & { webkitFullscreenElement?: Element | null };
+      const fsActive = Boolean(document.fullscreenElement || doc.webkitFullscreenElement);
+      setIsNativeFullscreen(fsActive);
+      if (!fsActive) {
+        setIsTheaterExpanded(false);
+      }
+    };
+
+    const videoEl = videoRef.current;
+    const handleWebkitBegin = () => setIsNativeFullscreen(true);
+    const handleWebkitEnd = () => setIsNativeFullscreen(false);
+
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    document.addEventListener('webkitfullscreenchange', syncFullscreen);
+    videoEl?.addEventListener('webkitbeginfullscreen', handleWebkitBegin);
+    videoEl?.addEventListener('webkitendfullscreen', handleWebkitEnd);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreen);
+      document.removeEventListener('webkitfullscreenchange', syncFullscreen);
+      videoEl?.removeEventListener('webkitbeginfullscreen', handleWebkitBegin);
+      videoEl?.removeEventListener('webkitendfullscreen', handleWebkitEnd);
+    };
+  }, [activeVideoParsed.type, activeVideoParsed.src]);
+
+  // Allow Escape key to close the theater-mode fallback
+  useEffect(() => {
+    if (!isTheaterExpanded) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsTheaterExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isTheaterExpanded]);
+
+  const handleEnterFullscreen = async () => {
+    const videoEl = videoRef.current as (HTMLVideoElement & {
+      webkitEnterFullscreen?: () => void;
+    }) | null;
+
+    if (activeVideoParsed.type === 'direct' && videoEl) {
+      if (videoEl.muted) {
+        videoEl.muted = false;
+        setAutoplayBlockedMuted(false);
+        onPauseAmbientMusicRef.current();
+      }
+      if (videoEl.paused) {
+        try {
+          await videoEl.play();
+          setAutoplayBlockedPlay(false);
+          onPauseAmbientMusicRef.current();
+        } catch {
+          // Continue to fullscreen even if browser blocks play
+        }
+      }
+    }
+
+    const container = playerContainerRef.current as (HTMLDivElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    }) | null;
+
+    try {
+      if (container?.requestFullscreen) {
+        await container.requestFullscreen();
+        return;
+      }
+      if (container?.webkitRequestFullscreen) {
+        await container.webkitRequestFullscreen();
+        return;
+      }
+      if (videoEl?.webkitEnterFullscreen) {
+        videoEl.webkitEnterFullscreen();
+        return;
+      }
+    } catch {
+      // Fall back cleanly to expanded in-page theater view
+    }
+
+    setIsTheaterExpanded(true);
+  };
+
+  const handleExitFullscreen = async () => {
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => Promise<void> | void;
+    };
+    const videoEl = videoRef.current as (HTMLVideoElement & {
+      webkitExitFullscreen?: () => void;
+    }) | null;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (doc.webkitFullscreenElement && doc.webkitExitFullscreen) {
+        await doc.webkitExitFullscreen();
+      } else if (videoEl?.webkitExitFullscreen) {
+        videoEl.webkitExitFullscreen();
+      }
+    } catch {
+      // Ignore exit errors
+    } finally {
+      setIsNativeFullscreen(false);
+      setIsTheaterExpanded(false);
+    }
+  };
 
   // Autoplay direct video with sound; gracefully fall back to muted autoplay or manual play if blocked
   useEffect(() => {
@@ -647,43 +765,110 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   );
 
   return (
-    <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 pt-16 pb-24 text-center overflow-y-auto">
+    <div
+      className={`relative flex w-full flex-col items-center justify-center px-4 py-2 text-center ${
+        isTheaterExpanded && !isNativeFullscreen ? 'z-50' : 'z-10'
+      }`}
+    >
       {/* Background radial glow */}
       <div className="pointer-events-none absolute h-96 w-96 rounded-full bg-amber-400/10 blur-[120px]" />
 
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
-        {/* Chapter marker */}
-        <div className="mb-2 inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/10 border border-amber-300/30 text-amber-200 text-xs tracking-wide">
-          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-          <span>الفصل السابع · فيديو المفاجأة</span>
-        </div>
+        {/* Cinematic Intro Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="flex flex-col items-center mb-2.5"
+        >
+          <div className="mb-2 inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/10 border border-amber-300/30 text-amber-200 text-xs tracking-wide shadow-[0_0_20px_rgba(253,224,71,0.12)]">
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+            <span>الفصل السابع · فيديو المفاجأة</span>
+          </div>
 
-        <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl text-slate-100 font-normal tracking-wide mb-1.5">
-          {SURPRISE_CONFIG.birthdayVideoTitle}
-        </h2>
-        <p className="text-xs sm:text-sm text-slate-300 font-light mb-3.5 max-w-lg">
-          {SURPRISE_CONFIG.birthdayVideoSubtitle}
-        </p>
+          <div className="flex items-center justify-center gap-2.5">
+            <Clapperboard className="w-5 h-5 sm:w-6 sm:h-6 text-amber-300 drop-shadow-[0_0_10px_rgba(253,224,71,0.5)] shrink-0" />
+            <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl text-amber-50 font-normal tracking-wide text-glow">
+              {SURPRISE_CONFIG.birthdayVideoTitle}
+            </h2>
+          </div>
+
+          <p className="mt-1 text-xs sm:text-sm text-slate-300 font-light max-w-lg">
+            {SURPRISE_CONFIG.birthdayVideoSubtitle}
+          </p>
+
+          {/* Fullscreen recommendation & prominent CTA */}
+          {isCustomVideoActive && (
+            <div className="mt-3 flex flex-col sm:flex-row items-center justify-center gap-2.5 px-4 py-2 rounded-2xl bg-amber-400/10 border border-amber-300/25 shadow-[0_0_25px_rgba(253,224,71,0.12)]">
+              <p className="text-xs sm:text-sm text-amber-100/95 font-serif flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0 animate-pulse" />
+                <span>ننصحك بتكبير الشاشة لمشاهدة المفاجأة بأجمل جودة ❤️</span>
+              </p>
+
+              <button
+                type="button"
+                onClick={isExpandedView ? handleExitFullscreen : handleEnterFullscreen}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full font-serif text-xs sm:text-sm font-medium text-slate-950 bg-gradient-to-r from-amber-100 via-amber-200 to-amber-100 shadow-[0_0_18px_rgba(253,224,71,0.45)] hover:shadow-[0_0_26px_rgba(253,224,71,0.75)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+              >
+                {isExpandedView ? (
+                  <>
+                    <Minimize2 className="w-3.5 h-3.5 text-amber-900" />
+                    <span>إغلاق ملء الشاشة</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="w-3.5 h-3.5 text-amber-900" />
+                    <span>مشاهدة بملء الشاشة ✨</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </motion.div>
 
         {/* CINEMA FRAME */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.7 }}
-          className="relative w-full rounded-3xl bg-slate-950/75 backdrop-blur-xl border border-amber-300/35 shadow-[0_25px_70px_rgba(0,0,0,0.75)] p-3 sm:p-4"
+          style={isTheaterExpanded && !isNativeFullscreen ? { transform: 'none' } : undefined}
+          className={`relative w-full rounded-3xl bg-slate-950/75 border border-amber-300/35 shadow-[0_25px_70px_rgba(0,0,0,0.75)] p-2.5 sm:p-3.5 ${
+            isTheaterExpanded && !isNativeFullscreen ? '' : 'backdrop-blur-xl'
+          }`}
         >
-          <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-[#070b19] border border-white/10">
+          <div
+            ref={playerContainerRef}
+            data-testid="video-fullscreen-container"
+            className={`cinema-fullscreen-container overflow-hidden bg-black ${
+              isTheaterExpanded && !isNativeFullscreen
+                ? 'fixed inset-0 z-50 w-screen h-dvh flex items-center justify-center rounded-none border-0'
+                : 'relative w-full aspect-video rounded-2xl border border-white/10'
+            }`}
+          >
             {isCustomVideoActive ? (
               activeVideoParsed.type === 'youtube' ? (
-                <iframe
-                  src={activeVideoParsed.src}
-                  title={SURPRISE_CONFIG.birthdayVideoTitle}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              ) : (
                 <div className="relative w-full h-full">
+                  <iframe
+                    src={activeVideoParsed.src}
+                    title={SURPRISE_CONFIG.birthdayVideoTitle}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                  {isExpandedView && (
+                    <button
+                      type="button"
+                      onClick={handleExitFullscreen}
+                      aria-label="إغلاق ملء الشاشة"
+                      className="absolute top-4 left-4 z-30 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-amber-100 bg-slate-950/85 hover:bg-slate-900 border border-amber-300/40 shadow-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                    >
+                      <Minimize2 className="w-3.5 h-3.5 text-amber-300" />
+                      <span>إغلاق ملء الشاشة</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="relative w-full h-full flex items-center justify-center bg-black">
                   <video
                     ref={videoRef}
                     src={activeVideoParsed.src}
@@ -709,6 +894,18 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
                     onError={() => setVideoLoadError(true)}
                     className="w-full h-full object-contain bg-black"
                   />
+
+                  {isExpandedView && (
+                    <button
+                      type="button"
+                      onClick={handleExitFullscreen}
+                      aria-label="إغلاق ملء الشاشة"
+                      className="absolute top-4 left-4 z-30 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-amber-100 bg-slate-950/85 hover:bg-slate-900 border border-amber-300/40 shadow-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                    >
+                      <Minimize2 className="w-3.5 h-3.5 text-amber-300" />
+                      <span>إغلاق ملء الشاشة</span>
+                    </button>
+                  )}
 
                   {autoplayBlockedMuted && !videoLoadError && (
                     <button

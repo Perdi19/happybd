@@ -137,7 +137,7 @@ export const RiddleScene: React.FC<RiddleSceneProps> = ({ onSolved }) => {
   };
 
   return (
-    <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 py-16 text-center">
+    <div className="relative z-10 flex w-full flex-col items-center justify-center px-4 py-6 text-center">
       {/* Background glow circle */}
       <div className="pointer-events-none absolute h-96 w-96 rounded-full bg-amber-500/10 blur-[100px]" />
 

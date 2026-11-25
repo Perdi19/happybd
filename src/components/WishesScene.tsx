@@ -61,7 +61,7 @@ export const WishesScene: React.FC<WishesSceneProps> = ({ onContinue }) => {
   };
 
   return (
-    <div className="relative z-10 flex min-h-screen flex-col items-center justify-between px-4 pt-12 pb-20 text-center overflow-hidden">
+    <div className="relative z-10 flex w-full flex-col items-center justify-center gap-4 px-4 py-4 text-center overflow-hidden">
       {/* Soft celestial sky halo */}
       <div className="pointer-events-none absolute top-10 h-[500px] w-[500px] rounded-full bg-indigo-500/10 blur-[130px]" />
       <div className="pointer-events-none absolute top-32 h-[350px] w-[350px] rounded-full bg-amber-200/10 blur-[100px]" />

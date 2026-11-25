@@ -93,7 +93,7 @@ export default function App() {
   };
 
   return (
-    <div dir="rtl" className="relative min-h-screen w-full overflow-hidden bg-[#070a14] text-slate-100 font-sans selection:bg-amber-400/30 selection:text-amber-100">
+    <div dir="rtl" className="relative min-h-dvh w-full flex flex-col overflow-x-clip bg-[#070a14] text-slate-100 font-sans selection:bg-amber-400/30 selection:text-amber-100">
       {/* 1. Cinematic Enchanted Garden Photographic Backdrop */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <img
@@ -122,7 +122,7 @@ export default function App() {
 
       {/* 4. Main Journey Stages */}
       <ErrorBoundary>
-        <main className="relative z-10 min-h-screen flex flex-col justify-center">
+        <main className="relative flex-1 flex flex-col justify-center pt-16 pb-4 md:pt-16 md:pb-6 md:pr-20">
           <AnimatePresence mode="wait">
             {currentChapter === 1 && (
               <motion.div

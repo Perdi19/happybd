@@ -14,7 +14,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onResetExperience,
 }) => {
   return (
-    <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-6 py-4">
+    <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 py-3.5 bg-gradient-to-b from-[#070a14]/90 via-[#070a14]/65 to-transparent backdrop-blur-[2px]">
       {/* Brand / Title mark */}
       <div className="flex items-center gap-2">
         <Sparkles className="w-4 h-4 text-amber-200/80 animate-pulse" />

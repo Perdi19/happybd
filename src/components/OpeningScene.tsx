@@ -38,7 +38,7 @@ export const OpeningScene: React.FC<OpeningSceneProps> = ({
   };
 
   return (
-    <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 py-12 text-center">
+    <div className="relative z-10 flex w-full flex-col items-center justify-center px-4 py-6 text-center">
       {/* Soft Moon glow halo behind card */}
       <div className="pointer-events-none absolute h-96 w-96 rounded-full bg-indigo-500/10 blur-[100px]" />
       <div className="pointer-events-none absolute h-72 w-72 rounded-full bg-amber-200/10 blur-[90px]" />

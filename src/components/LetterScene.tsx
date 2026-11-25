@@ -75,7 +75,7 @@ export const LetterScene: React.FC<LetterSceneProps> = ({
   };
 
   return (
-    <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 pt-20 pb-28 text-center overflow-y-auto">
+    <div className="relative z-10 flex w-full flex-col items-center justify-center px-4 py-4 text-center">
       {/* Background radial warmth */}
       <div className="pointer-events-none absolute h-96 w-96 rounded-full bg-amber-400/10 blur-[120px]" />
 

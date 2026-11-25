@@ -76,7 +76,7 @@ export const BloomingFlowerScene: React.FC<BloomingFlowerSceneProps> = ({
   const flowerOpenProgress = Math.max(0, Math.min(1, (growth - 0.65) / 0.35));
 
   return (
-    <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 pt-10 pb-20 text-center overflow-hidden">
+    <div className="relative z-10 flex w-full flex-col items-center justify-center px-4 py-4 text-center overflow-hidden">
       {/* Soft Ethereal Moonlight backdrop */}
       <div className="pointer-events-none absolute top-12 h-80 w-80 rounded-full bg-slate-200/10 blur-[90px]" />
       <div className="pointer-events-none absolute top-28 h-96 w-96 rounded-full bg-amber-200/10 blur-[100px]" />
