@@ -79,30 +79,30 @@ body {
 /* Realistic organic candle flame dance and ambient halo breathing */
 @keyframes candleFlameDance {
   0%, 100% {
-    transform: rotate(-1.5deg) scaleX(1) scaleY(1);
+    transform: rotate(-3deg) skewX(1.5deg) scaleX(1) scaleY(1);
   }
   20% {
-    transform: rotate(2.4deg) skewX(-2deg) scaleX(0.96) scaleY(1.06);
+    transform: rotate(4.8deg) skewX(-4deg) scaleX(0.94) scaleY(1.11);
   }
   42% {
-    transform: rotate(-2.8deg) skewX(2.2deg) scaleX(1.04) scaleY(0.95);
+    transform: rotate(-5.2deg) skewX(4.2deg) scaleX(1.06) scaleY(0.92);
   }
   68% {
-    transform: rotate(1.8deg) skewX(-1.5deg) scaleX(0.98) scaleY(1.04);
+    transform: rotate(3.6deg) skewX(-3deg) scaleX(0.96) scaleY(1.08);
   }
   84% {
-    transform: rotate(-1deg) skewX(1deg) scaleX(1.02) scaleY(0.98);
+    transform: rotate(-2.2deg) skewX(2deg) scaleX(1.03) scaleY(0.96);
   }
 }
 
 @keyframes candleHaloBreathe {
   0%, 100% {
-    opacity: 0.72;
-    transform: scale(0.96);
+    opacity: 0.68;
+    transform: scale(0.93);
   }
   50% {
     opacity: 1;
-    transform: scale(1.06);
+    transform: scale(1.12);
   }
 }
 

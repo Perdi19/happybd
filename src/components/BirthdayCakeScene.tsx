@@ -184,12 +184,12 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
   const litRatio = candles.filter(Boolean).length / candlePositions.length;
 
   return (
-    <div className="relative z-10 flex w-full flex-col items-center justify-center px-4 py-4 text-center overflow-hidden">
+    <div className="relative z-10 flex w-full flex-col items-center justify-center px-4 py-2 sm:py-3 md:py-4 text-center overflow-visible">
       {/* Background radial candlelight glow */}
-      <div className="pointer-events-none absolute top-1/4 h-80 w-80 rounded-full bg-amber-400/15 blur-[100px]" />
+      <div className="pointer-events-none absolute top-1/4 h-80 w-80 md:h-[26rem] md:w-[26rem] rounded-full bg-amber-400/15 blur-[110px]" />
 
       {/* Chapter Marker */}
-      <div className="mb-2 inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/10 border border-amber-300/30 text-amber-200 text-xs tracking-wide">
+      <div className="mb-1.5 sm:mb-2 inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-400/10 border border-amber-300/30 text-amber-200 text-xs tracking-wide">
         <Sparkles className="w-3.5 h-3.5 text-amber-300" />
         <span>الفصل الرابع · أمنية الميلاد</span>
       </div>
@@ -197,15 +197,16 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
       <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl text-slate-100 font-normal tracking-wide max-w-xl">
         تمنّي أمنية يا {SURPRISE_CONFIG.recipientName}...
       </h2>
-      <p className="text-xs sm:text-sm text-slate-300 font-light mt-1 max-w-md">
+      <p className="text-xs sm:text-sm md:text-base text-slate-300 font-light mt-1 max-w-lg">
         أغمضي عينيكِ، واحفظي أمنيةً سرية في قلبكِ، ثم أطفئي الشموع.
       </p>
 
       {/* INTERACTIVE CAKE & CANDLES SVG */}
-      <div className="relative w-full max-w-md h-[260px] sm:h-[290px] md:h-[320px] my-1 flex items-center justify-center">
+      <div className="relative w-full max-w-[360px] sm:max-w-md md:max-w-xl lg:max-w-2xl h-[255px] sm:h-[290px] md:h-[clamp(290px,43dvh,420px)] xl:h-[clamp(340px,46dvh,480px)] my-1 sm:my-2 flex items-center justify-center overflow-visible">
         <svg
-          viewBox="0 0 800 700"
-          className="w-full h-full overflow-visible drop-shadow-[0_15px_30px_rgba(0,0,0,0.6)]"
+          viewBox="30 110 740 555"
+          preserveAspectRatio="xMidYMid meet"
+          className="w-full h-full overflow-visible drop-shadow-[0_18px_36px_rgba(0,0,0,0.65)]"
         >
           <defs>
             {/* Cake Icing Gradients */}
@@ -281,8 +282,8 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
             </linearGradient>
 
             <linearGradient id="smokeGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-              <stop offset="0%" stopColor="rgba(241, 245, 249, 0.85)" />
-              <stop offset="55%" stopColor="rgba(203, 213, 225, 0.45)" />
+              <stop offset="0%" stopColor="rgba(248, 250, 252, 0.92)" />
+              <stop offset="55%" stopColor="rgba(203, 213, 225, 0.56)" />
               <stop offset="100%" stopColor="rgba(203, 213, 225, 0)" />
             </linearGradient>
           </defs>
@@ -519,7 +520,7 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
                         <circle
                           cx="0"
                           cy="-15"
-                          r="32"
+                          r="38"
                           fill="url(#flameGlowAura)"
                           className={shouldReduceMotion ? '' : 'candle-halo-breathe'}
                           style={
@@ -647,12 +648,12 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
                               d="M0 1 C7 -14, -10 -29, 5 -46 C15 -60, -5 -74, 7 -92"
                               fill="none"
                               stroke="url(#smokeGrad)"
-                              strokeWidth="2.5"
+                              strokeWidth="3.2"
                               strokeLinecap="round"
                               initial={{ pathLength: 0.08, opacity: 0, y: 4, x: 0 }}
                               animate={{
                                 pathLength: [0.08, 0.85, 1],
-                                opacity: [0, 0.8, 0.45, 0],
+                                opacity: [0, 0.88, 0.5, 0],
                                 y: [4, -14, -34],
                                 x: [0, 7, 15],
                               }}
@@ -663,13 +664,13 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
                             <motion.path
                               d="M-1 -2 C-8 -16, 9 -28, -2 -44 C-10 -57, 7 -70, -2 -84"
                               fill="none"
-                              stroke="rgba(226, 232, 240, 0.52)"
-                              strokeWidth="1.6"
+                              stroke="rgba(226, 232, 240, 0.66)"
+                              strokeWidth="2.1"
                               strokeLinecap="round"
                               initial={{ pathLength: 0.05, opacity: 0, y: 2, x: 0 }}
                               animate={{
                                 pathLength: [0.05, 0.8, 1],
-                                opacity: [0, 0.58, 0.25, 0],
+                                opacity: [0, 0.68, 0.3, 0],
                                 y: [2, -16, -30],
                                 x: [0, 4, 11],
                               }}
@@ -680,8 +681,8 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
                             <motion.circle
                               cx="2"
                               cy="-10"
-                              r="6.5"
-                              fill="rgba(226, 232, 240, 0.34)"
+                              r="7.5"
+                              fill="rgba(226, 232, 240, 0.4)"
                               initial={{ scale: 0.5, opacity: 0, y: 0, x: 0 }}
                               animate={{
                                 scale: [0.5, 1.4, 2.2],
@@ -736,46 +737,46 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
 
                 {/* Flowing aerodynamic breath streamlines */}
                 <motion.path
-                  d="M42 278 C165 258, 285 252, 415 242 C510 235, 585 224, 658 214"
+                  d="M42 278 C165 258, 285 252, 415 242 C510 235, 585 224, 668 214"
+                  fill="none"
+                  stroke="url(#windStreamGrad)"
+                  strokeWidth="4.2"
+                  strokeLinecap="round"
+                  initial={{ pathLength: 0, pathOffset: 0, opacity: 0 }}
+                  animate={{
+                    pathLength: [0.18, 0.58, 0.22],
+                    pathOffset: [0, 0.35, 0.85],
+                    opacity: [0, 0.96, 0],
+                  }}
+                  transition={{ duration: 0.88, ease: 'easeOut' }}
+                />
+
+                <motion.path
+                  d="M58 256 C185 246, 305 244, 430 234 C520 227, 595 238, 662 246"
                   fill="none"
                   stroke="url(#windStreamGrad)"
                   strokeWidth="3.2"
                   strokeLinecap="round"
                   initial={{ pathLength: 0, pathOffset: 0, opacity: 0 }}
                   animate={{
-                    pathLength: [0.15, 0.55, 0.2],
-                    pathOffset: [0, 0.35, 0.85],
-                    opacity: [0, 0.92, 0],
-                  }}
-                  transition={{ duration: 0.88, ease: 'easeOut' }}
-                />
-
-                <motion.path
-                  d="M58 256 C185 246, 305 244, 430 234 C520 227, 595 238, 652 246"
-                  fill="none"
-                  stroke="url(#windStreamGrad)"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  initial={{ pathLength: 0, pathOffset: 0, opacity: 0 }}
-                  animate={{
-                    pathLength: [0.12, 0.5, 0.18],
+                    pathLength: [0.14, 0.54, 0.2],
                     pathOffset: [0, 0.4, 0.88],
-                    opacity: [0, 0.85, 0],
+                    opacity: [0, 0.9, 0],
                   }}
                   transition={{ duration: 0.85, delay: 0.08, ease: 'easeOut' }}
                 />
 
                 <motion.path
-                  d="M72 296 C190 282, 310 272, 435 262 C525 255, 595 252, 648 242"
+                  d="M72 296 C190 282, 310 272, 435 262 C525 255, 595 252, 658 242"
                   fill="none"
                   stroke="url(#windStreamGrad)"
-                  strokeWidth="2.1"
+                  strokeWidth="2.7"
                   strokeLinecap="round"
                   initial={{ pathLength: 0, pathOffset: 0, opacity: 0 }}
                   animate={{
-                    pathLength: [0.12, 0.48, 0.16],
+                    pathLength: [0.14, 0.5, 0.18],
                     pathOffset: [0, 0.38, 0.86],
-                    opacity: [0, 0.78, 0],
+                    opacity: [0, 0.84, 0],
                   }}
                   transition={{ duration: 0.82, delay: 0.14, ease: 'easeOut' }}
                 />
@@ -849,7 +850,7 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
             initial={{ opacity: 0, scale: 0.92, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="w-full max-w-lg mb-6 p-4 sm:p-5 rounded-2xl bg-slate-950/75 backdrop-blur-xl border border-amber-300/30 shadow-[0_0_35px_rgba(253,224,71,0.25)] flex flex-col items-center gap-3"
+            className="w-full max-w-lg mb-2 sm:mb-4 p-3.5 sm:p-4 md:p-5 rounded-2xl bg-slate-950/75 backdrop-blur-xl border border-amber-300/30 shadow-[0_0_35px_rgba(253,224,71,0.25)] flex flex-col items-center gap-2.5 sm:gap-3"
           >
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-300/10 border border-amber-200/30 text-amber-300">
               <Heart className="w-4 h-4 fill-amber-300/30 text-amber-200 animate-pulse" />
