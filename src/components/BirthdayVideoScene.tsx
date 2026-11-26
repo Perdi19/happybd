@@ -1,17 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import {
   Sparkles,
   Play,
   Pause,
   RotateCcw,
-  Upload,
-  Link2,
   Download,
-  Film,
   Music,
-  Trash2,
-  ArrowRight,
   Volume2,
   Maximize2,
   Minimize2,
@@ -28,71 +23,8 @@ import {
 
 interface BirthdayVideoSceneProps {
   onPauseAmbientMusic: () => void;
-  onBackToLetter: () => void;
+  onBackToLetter?: () => void;
   onRestartAll: () => void;
-}
-
-const DB_NAME = 'jasmine_birthday_media';
-const STORE_NAME = 'videos';
-const VIDEO_KEY = 'custom_finale_video';
-
-function openVideoDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(STORE_NAME)) {
-        req.result.createObjectStore(STORE_NAME);
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function saveVideoBlob(blob: Blob): Promise<void> {
-  try {
-    const db = await openVideoDb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put(blob, VIDEO_KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-  } catch {
-    // Ignore storage quota or private browsing restrictions
-  }
-}
-
-async function loadVideoBlob(): Promise<Blob | null> {
-  try {
-    const db = await openVideoDb();
-    const result = await new Promise<Blob | null>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const req = tx.objectStore(STORE_NAME).get(VIDEO_KEY);
-      req.onsuccess = () => resolve((req.result as Blob) || null);
-      req.onerror = () => reject(req.error);
-    });
-    db.close();
-    return result;
-  } catch {
-    return null;
-  }
-}
-
-async function clearVideoBlob(): Promise<void> {
-  try {
-    const db = await openVideoDb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).delete(VIDEO_KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-  } catch {
-    // Ignore
-  }
 }
 
 interface StarDot {
@@ -104,18 +36,10 @@ interface StarDot {
 
 export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   onPauseAmbientMusic,
-  onBackToLetter,
   onRestartAll,
 }) => {
   const configuredSource = parseVideoSource(SURPRISE_CONFIG.birthdayVideoUrl);
 
-  const [customUrlInput, setCustomUrlInput] = useState<string>('');
-  const [customSourceUrl, setCustomSourceUrl] = useState<string>(
-    configuredSource.type !== 'none' ? SURPRISE_CONFIG.birthdayVideoUrl : ''
-  );
-  const [uploadedBlobUrl, setUploadedBlobUrl] = useState<string | null>(null);
-  const [showUploadDrawer, setShowUploadDrawer] = useState<boolean>(false);
-  const [urlError, setUrlError] = useState<string>('');
   const [autoplayBlockedMuted, setAutoplayBlockedMuted] = useState<boolean>(false);
   const [autoplayBlockedPlay, setAutoplayBlockedPlay] = useState<boolean>(false);
   const [videoLoadError, setVideoLoadError] = useState<boolean>(false);
@@ -132,7 +56,6 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const onPauseAmbientMusicRef = useRef(onPauseAmbientMusic);
   onPauseAmbientMusicRef.current = onPauseAmbientMusic;
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const activeOscsRef = useRef<OscillatorNode[]>([]);
@@ -149,27 +72,8 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
 
   const verses = getBirthdaySongVerses(SURPRISE_CONFIG.recipientName);
 
-  // Load any previously uploaded video from IndexedDB
-  useEffect(() => {
-    let active = true;
-    let objectUrl: string | null = null;
-    loadVideoBlob().then((blob) => {
-      if (active && blob) {
-        objectUrl = URL.createObjectURL(blob);
-        setUploadedBlobUrl(objectUrl);
-      }
-    });
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, []);
-
-  // Determine active external/uploaded source
-  const activeVideoParsed = uploadedBlobUrl
-    ? { type: 'direct' as const, src: uploadedBlobUrl }
-    : parseVideoSource(customSourceUrl);
-
+  // Determine active configured video source
+  const activeVideoParsed = configuredSource;
   const isCustomVideoActive = activeVideoParsed.type !== 'none';
   const isExpandedView = isNativeFullscreen || isTheaterExpanded;
 
@@ -714,51 +618,6 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
     }
   };
 
-  // Handle user uploading a video file from device
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    stopMusicalVideo();
-    if (uploadedBlobUrl) {
-      URL.revokeObjectURL(uploadedBlobUrl);
-    }
-    const url = URL.createObjectURL(file);
-    setUploadedBlobUrl(url);
-    setShowUploadDrawer(false);
-    setUrlError('');
-    await saveVideoBlob(file);
-  };
-
-  const handleApplyUrl = (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsed = parseVideoSource(customUrlInput);
-    if (parsed.type === 'none') {
-      setUrlError('يرجى إدخال رابط فيديو صحيح (مثل رابط MP4 أو YouTube).');
-      return;
-    }
-    stopMusicalVideo();
-    if (uploadedBlobUrl) {
-      URL.revokeObjectURL(uploadedBlobUrl);
-      setUploadedBlobUrl(null);
-    }
-    clearVideoBlob();
-    setCustomSourceUrl(customUrlInput.trim());
-    setUrlError('');
-    setShowUploadDrawer(false);
-  };
-
-  const handleResetToMusical = async () => {
-    if (uploadedBlobUrl) {
-      URL.revokeObjectURL(uploadedBlobUrl);
-      setUploadedBlobUrl(null);
-    }
-    await clearVideoBlob();
-    setCustomSourceUrl('');
-    setCustomUrlInput('');
-    setUrlError('');
-  };
-
   const progressPct = Math.min(
     100,
     (currentTime / BIRTHDAY_SONG_TOTAL_DURATION) * 100
@@ -940,7 +799,7 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
                         تعذّر تحميل ملف الفيديو.
                       </p>
                       <p className="text-xs text-slate-400">
-                        تأكّد من توفر الملف في المسار الصحيح أو جرّب رفع فيديو آخر أدناه.
+                        تأكّد من توفر ملف الفيديو في المسار الصحيح.
                       </p>
                     </div>
                   )}
@@ -1037,115 +896,19 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
             </div>
           )}
 
-          {/* UPLOAD / CUSTOM VIDEO SWITCHER */}
-          <div className="mt-3 pt-3 border-t border-white/10 flex flex-wrap items-center justify-center gap-2.5">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              onChange={handleFileSelected}
-              className="hidden"
-              aria-label="اختيار ملف فيديو من الجهاز"
-            />
-
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium text-amber-100 bg-slate-900/80 hover:bg-slate-800 border border-amber-300/30 transition-colors cursor-pointer"
-            >
-              <Upload className="w-3.5 h-3.5 text-amber-300" />
-              <span>رفع فيديو من جهازك 📹</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowUploadDrawer((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs text-slate-300 hover:text-white border border-white/10 hover:border-white/25 transition-colors cursor-pointer"
-            >
-              <Link2 className="w-3.5 h-3.5 text-amber-200" />
-              <span>إضافة رابط فيديو</span>
-            </button>
-
-            {isCustomVideoActive && (
-              <button
-                type="button"
-                onClick={handleResetToMusical}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs text-rose-200 hover:text-rose-100 bg-rose-500/10 border border-rose-300/25 transition-colors cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>العودة للفيديو الموسيقي المخصّص</span>
-              </button>
-            )}
-          </div>
-
-          {/* URL INPUT DRAWER */}
-          <AnimatePresence>
-            {showUploadDrawer && (
-              <motion.form
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                onSubmit={handleApplyUrl}
-                className="mt-3 overflow-hidden"
-              >
-                <div className="p-3 rounded-2xl bg-slate-900/80 border border-white/10 flex flex-col gap-2">
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <input
-                      type="text"
-                      dir="ltr"
-                      value={customUrlInput}
-                      onChange={(e) => setCustomUrlInput(e.target.value)}
-                      placeholder="https://... (MP4 أو رابط YouTube)"
-                      aria-label="رابط الفيديو"
-                      className="flex-1 px-3.5 py-2 rounded-xl text-xs bg-slate-950/80 border border-white/15 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-300 text-left"
-                    />
-                    <button
-                      type="submit"
-                      className="px-4 py-2 rounded-xl text-xs font-medium text-slate-950 bg-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
-                    >
-                      عرض الفيديو
-                    </button>
-                  </div>
-                  {urlError && (
-                    <p className="text-[11px] text-rose-300 text-right">
-                      {urlError}
-                    </p>
-                  )}
-                  <p className="text-[11px] text-slate-400 text-right flex items-center gap-1.5">
-                    <Film className="w-3 h-3 text-amber-300/80 shrink-0" />
-                    <span>
-                      ملاحظة: لحفظ الفيديو بشكلٍ دائم عند مشاركة الرابط، يمكن وضع ملف الفيديو في مجلد public وإضافة مساره في الإعدادات.
-                    </span>
-                  </p>
-                </div>
-              </motion.form>
-            )}
-          </AnimatePresence>
         </motion.div>
 
-        {/* Bottom navigation back to Letter or Restart */}
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              stopMusicalVideo();
-              onBackToLetter();
-            }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs text-slate-300 hover:text-white border border-white/10 hover:border-white/25 transition-colors cursor-pointer"
-          >
-            <ArrowRight className="w-3.5 h-3.5 text-amber-200" />
-            <span>العودة إلى الرسالة</span>
-          </button>
-
+        {/* Bottom navigation: Restart story */}
+        <div className="mt-5 flex items-center justify-center">
           <button
             type="button"
             onClick={() => {
               stopMusicalVideo();
               onRestartAll();
             }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs text-amber-200/80 hover:text-amber-100 border border-amber-300/20 hover:border-amber-300/40 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs sm:text-sm font-serif text-amber-100/90 hover:text-amber-50 bg-slate-900/65 hover:bg-slate-800/80 border border-amber-300/25 hover:border-amber-300/50 shadow-[0_0_20px_rgba(253,224,71,0.08)] hover:shadow-[0_0_24px_rgba(253,224,71,0.18)] transition-all duration-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
           >
-            <Music className="w-3.5 h-3.5" />
+            <Music className="w-3.5 h-3.5 text-amber-300" />
             <span>إعادة الحكاية من البداية</span>
           </button>
         </div>

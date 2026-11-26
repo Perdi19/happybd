@@ -76,6 +76,57 @@ body {
   animation: pulseGlow 3s ease-in-out infinite;
 }
 
+/* Realistic organic candle flame dance and ambient halo breathing */
+@keyframes candleFlameDance {
+  0%, 100% {
+    transform: rotate(-1.5deg) scaleX(1) scaleY(1);
+  }
+  20% {
+    transform: rotate(2.4deg) skewX(-2deg) scaleX(0.96) scaleY(1.06);
+  }
+  42% {
+    transform: rotate(-2.8deg) skewX(2.2deg) scaleX(1.04) scaleY(0.95);
+  }
+  68% {
+    transform: rotate(1.8deg) skewX(-1.5deg) scaleX(0.98) scaleY(1.04);
+  }
+  84% {
+    transform: rotate(-1deg) skewX(1deg) scaleX(1.02) scaleY(0.98);
+  }
+}
+
+@keyframes candleHaloBreathe {
+  0%, 100% {
+    opacity: 0.72;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+.candle-flame-dance {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: candleFlameDance var(--flame-dur, 1.6s) ease-in-out var(--flame-delay, 0s) infinite;
+}
+
+.candle-halo-breathe {
+  transform-box: fill-box;
+  transform-origin: center center;
+  animation: candleHaloBreathe var(--flame-dur, 1.8s) ease-in-out var(--flame-delay, 0s) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-gentle,
+  .animate-pulse-glow,
+  .candle-flame-dance,
+  .candle-halo-breathe {
+    animation: none !important;
+  }
+}
+
 /* Fullscreen cinematic video container */
 .cinema-fullscreen-container:fullscreen,
 .cinema-fullscreen-container:-webkit-full-screen {

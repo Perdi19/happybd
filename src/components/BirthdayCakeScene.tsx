@@ -1,73 +1,187 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Sparkles, Wind, RotateCcw, ArrowLeft, Heart } from 'lucide-react';
 import { SURPRISE_CONFIG } from '../config/surpriseConfig';
 import { audioEngine } from '../utils/audioEngine';
+import {
+  CANDLE_POSITIONS,
+  WIND_PARTICLES,
+  canStartBlowSequence,
+  getLitCandleIndices,
+  getCandleFlameOrigin,
+  getCandleFlickerProfile,
+  getCandleBlowSchedule,
+  getBlowSequenceDurationMs,
+} from '../utils/candleAnimation';
 
 interface BirthdayCakeSceneProps {
   onContinue: () => void;
 }
 
 export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue }) => {
-  // 5 candles
+  const shouldReduceMotion = Boolean(useReducedMotion());
+
+  // 5 candles + per-candle wind-bending & post-extinguish smoke state
   const [candles, setCandles] = useState<boolean[]>([true, true, true, true, true]);
+  const [bendingCandles, setBendingCandles] = useState<boolean[]>([false, false, false, false, false]);
+  const [smokingCandles, setSmokingCandles] = useState<boolean[]>([false, false, false, false, false]);
+  const [blowCycle, setBlowCycle] = useState<number>(0);
   const [isBlowing, setIsBlowing] = useState<boolean>(false);
   const [allExtinguished, setAllExtinguished] = useState<boolean>(false);
 
-  // Check if all blown
+  const timersRef = useRef<number[]>([]);
+
+  const clearTimers = useCallback(() => {
+    timersRef.current.forEach((id) => window.clearTimeout(id));
+    timersRef.current = [];
+  }, []);
+
+  const scheduleTimeout = useCallback((fn: () => void, delayMs: number) => {
+    const id = window.setTimeout(() => {
+      timersRef.current = timersRef.current.filter((t) => t !== id);
+      fn();
+    }, delayMs);
+    timersRef.current.push(id);
+    return id;
+  }, []);
+
+  // Clean up all timers if user navigates away mid-animation
+  useEffect(() => {
+    return () => {
+      clearTimers();
+    };
+  }, [clearTimers]);
+
+  // Trigger wish blessing state smoothly right after the final flame extinguishes
   useEffect(() => {
     if (candles.every((c) => !c) && !allExtinguished) {
-      setAllExtinguished(true);
-      audioEngine.playMagicalChime();
+      const revealDelay = shouldReduceMotion ? 40 : 220;
+      const timer = window.setTimeout(() => {
+        setAllExtinguished(true);
+        audioEngine.playMagicalChime();
+      }, revealDelay);
+      return () => window.clearTimeout(timer);
     }
-  }, [candles, allExtinguished]);
+  }, [candles, allExtinguished, shouldReduceMotion]);
 
   const handleBlowAll = () => {
+    if (!canStartBlowSequence(isBlowing, candles)) return;
+
+    const litIndices = getLitCandleIndices(candles);
+    clearTimers();
     setIsBlowing(true);
+    setBlowCycle((prev) => prev + 1);
     audioEngine.playBlowSound();
 
-    // Stagger candle extinction over 400ms for realistic breath flow
-    [0, 1, 2, 3, 4].forEach((idx) => {
-      setTimeout(() => {
+    // Sweep directional breath gust across currently lit candles from left to right
+    litIndices.forEach((idx) => {
+      const step = getCandleBlowSchedule(idx, litIndices, shouldReduceMotion);
+
+      scheduleTimeout(() => {
+        setBendingCandles((prev) => {
+          const next = [...prev];
+          next[idx] = true;
+          return next;
+        });
+      }, step.bendMs);
+
+      scheduleTimeout(() => {
         setCandles((prev) => {
           const next = [...prev];
           next[idx] = false;
           return next;
         });
-      }, 100 + idx * 80);
+        setBendingCandles((prev) => {
+          const next = [...prev];
+          next[idx] = false;
+          return next;
+        });
+        setSmokingCandles((prev) => {
+          const next = [...prev];
+          next[idx] = true;
+          return next;
+        });
+      }, step.extinguishMs);
+
+      scheduleTimeout(() => {
+        setSmokingCandles((prev) => {
+          const next = [...prev];
+          next[idx] = false;
+          return next;
+        });
+      }, step.smokeEndMs);
     });
 
-    setTimeout(() => {
+    const totalGustDuration = getBlowSequenceDurationMs(litIndices, shouldReduceMotion);
+    scheduleTimeout(() => {
       setIsBlowing(false);
-    }, 1000);
+      setBendingCandles([false, false, false, false, false]);
+    }, totalGustDuration);
   };
 
   const handleToggleCandle = (idx: number) => {
+    if (isBlowing) return;
+
     if (candles[idx]) {
       audioEngine.playBlowSound();
+      const smokeDuration = shouldReduceMotion ? 900 : 2300;
+      setBendingCandles((prev) => {
+        const next = [...prev];
+        next[idx] = true;
+        return next;
+      });
+      scheduleTimeout(() => {
+        setCandles((prev) => {
+          const next = [...prev];
+          next[idx] = false;
+          return next;
+        });
+        setBendingCandles((prev) => {
+          const next = [...prev];
+          next[idx] = false;
+          return next;
+        });
+        setSmokingCandles((prev) => {
+          const next = [...prev];
+          next[idx] = true;
+          return next;
+        });
+        scheduleTimeout(() => {
+          setSmokingCandles((prev) => {
+            const next = [...prev];
+            next[idx] = false;
+            return next;
+          });
+        }, smokeDuration);
+      }, shouldReduceMotion ? 40 : 160);
     } else {
       audioEngine.playSparkleNote(784, 0.8, 0.12);
+      setSmokingCandles((prev) => {
+        const next = [...prev];
+        next[idx] = false;
+        return next;
+      });
+      setCandles((prev) => {
+        const next = [...prev];
+        next[idx] = true;
+        return next;
+      });
+      setAllExtinguished(false);
     }
-    setCandles((prev) => {
-      const next = [...prev];
-      next[idx] = !next[idx];
-      return next;
-    });
   };
 
   const handleRelight = () => {
+    clearTimers();
+    setIsBlowing(false);
+    setBendingCandles([false, false, false, false, false]);
+    setSmokingCandles([false, false, false, false, false]);
     setCandles([true, true, true, true, true]);
     setAllExtinguished(false);
     audioEngine.playSparkleNote(880, 1.2, 0.15);
   };
 
-  const candlePositions = [
-    { x: 310, y: 340, height: 50 },
-    { x: 355, y: 330, height: 60 },
-    { x: 400, y: 320, height: 70 },
-    { x: 445, y: 330, height: 60 },
-    { x: 490, y: 340, height: 50 },
-  ];
+  const candlePositions = CANDLE_POSITIONS;
+  const litRatio = candles.filter(Boolean).length / candlePositions.length;
 
   return (
     <div className="relative z-10 flex w-full flex-col items-center justify-center px-4 py-4 text-center overflow-hidden">
@@ -89,21 +203,6 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
 
       {/* INTERACTIVE CAKE & CANDLES SVG */}
       <div className="relative w-full max-w-md h-[260px] sm:h-[290px] md:h-[320px] my-1 flex items-center justify-center">
-        {/* Breath Wind animation across the cake */}
-        <AnimatePresence>
-          {isBlowing && (
-            <motion.div
-              initial={{ opacity: 0, x: -100 }}
-              animate={{ opacity: [0, 0.8, 0], x: [ -100, 100 ] }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.7 }}
-              className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
-            >
-              <div className="w-72 h-16 rounded-full bg-gradient-to-r from-transparent via-cyan-100/30 to-transparent blur-md transform -rotate-6" />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <svg
           viewBox="0 0 800 700"
           className="w-full h-full overflow-visible drop-shadow-[0_15px_30px_rgba(0,0,0,0.6)]"
@@ -138,13 +237,54 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
               <stop offset="100%" stopColor="#fde68a" />
             </linearGradient>
 
-            {/* Flame Radial Gradient */}
-            <radialGradient id="flameInner" cx="50%" cy="80%" r="70%">
-              <stop offset="0%" stopColor="#ffffff" />
-              <stop offset="25%" stopColor="#fef08a" />
-              <stop offset="65%" stopColor="#f97316" />
+            {/* Warm reflection on top tier from lit candles */}
+            <radialGradient id="cakeWarmReflection" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="rgba(253, 224, 71, 0.34)" />
+              <stop offset="55%" stopColor="rgba(251, 146, 60, 0.14)" />
+              <stop offset="100%" stopColor="rgba(251, 146, 60, 0)" />
+            </radialGradient>
+
+            {/* Layered Flame & Halo Gradients */}
+            <radialGradient id="flameGlowAura" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="rgba(254, 240, 138, 0.52)" />
+              <stop offset="48%" stopColor="rgba(251, 191, 36, 0.2)" />
+              <stop offset="100%" stopColor="rgba(251, 191, 36, 0)" />
+            </radialGradient>
+
+            <radialGradient id="flameOuter" cx="50%" cy="76%" r="65%">
+              <stop offset="0%" stopColor="#fef08a" />
+              <stop offset="45%" stopColor="#fb923c" />
+              <stop offset="85%" stopColor="rgba(234, 88, 12, 0.55)" />
               <stop offset="100%" stopColor="transparent" />
             </radialGradient>
+
+            <radialGradient id="flameInner" cx="50%" cy="80%" r="70%">
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="30%" stopColor="#fef08a" />
+              <stop offset="72%" stopColor="#f97316" />
+              <stop offset="100%" stopColor="transparent" />
+            </radialGradient>
+
+            {/* Visible Breath Wind & Smoke Gradients */}
+            <linearGradient id="windStreamGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="rgba(186, 230, 253, 0)" />
+              <stop offset="28%" stopColor="rgba(224, 242, 254, 0.85)" />
+              <stop offset="62%" stopColor="rgba(254, 249, 195, 0.72)" />
+              <stop offset="100%" stopColor="rgba(254, 249, 195, 0)" />
+            </linearGradient>
+
+            <linearGradient id="windVeilGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="rgba(186, 230, 253, 0)" />
+              <stop offset="45%" stopColor="rgba(186, 230, 253, 0.24)" />
+              <stop offset="75%" stopColor="rgba(254, 240, 138, 0.14)" />
+              <stop offset="100%" stopColor="rgba(254, 240, 138, 0)" />
+            </linearGradient>
+
+            <linearGradient id="smokeGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%" stopColor="rgba(241, 245, 249, 0.85)" />
+              <stop offset="55%" stopColor="rgba(203, 213, 225, 0.45)" />
+              <stop offset="100%" stopColor="rgba(203, 213, 225, 0)" />
+            </linearGradient>
           </defs>
 
           {/* 1. GOLDEN PEDESTAL STAND */}
@@ -265,16 +405,52 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
             ))}
           </g>
 
-          {/* 5. CANDLES & LIVE FLICKERING FLAMES */}
+          {/* 5. CANDLES, REALISTIC FLAMES, SMOKE & BREATH GUST */}
+          <motion.ellipse
+            cx="400"
+            cy="332"
+            rx="145"
+            ry="34"
+            fill="url(#cakeWarmReflection)"
+            animate={{ opacity: 0.1 + litRatio * 0.9 }}
+            transition={{ duration: shouldReduceMotion ? 0.15 : 0.4 }}
+            className="pointer-events-none"
+          />
+
           {candlePositions.map((pos, idx) => {
             const isLit = candles[idx];
+            const isBending = bendingCandles[idx];
+            const isSmoking = smokingCandles[idx];
+            const origin = getCandleFlameOrigin(pos);
+            const flicker = getCandleFlickerProfile(idx);
 
             return (
               <g
                 key={`candle-group-${idx}`}
+                data-testid={`candle-${idx}`}
+                data-lit={isLit ? 'true' : 'false'}
+                data-bending={isBending ? 'true' : 'false'}
+                role="button"
+                tabIndex={0}
+                aria-label={isLit ? `إطفاء الشمعة ${idx + 1}` : `إشعال الشمعة ${idx + 1}`}
                 onClick={() => handleToggleCandle(idx)}
-                className="cursor-pointer group"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleToggleCandle(idx);
+                  }
+                }}
+                className="cursor-pointer group focus:outline-none"
               >
+                {/* Expanded touch target for comfortable tapping on mobile & desktop */}
+                <rect
+                  x={pos.x - 16}
+                  y={pos.y - pos.height - 44}
+                  width="32"
+                  height={pos.height + 50}
+                  fill="transparent"
+                />
+
                 {/* Candle Stick */}
                 <rect
                   x={pos.x - 4}
@@ -285,6 +461,15 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
                   fill="url(#candleGrad)"
                   stroke="#eab308"
                   strokeWidth="0.8"
+                />
+                {/* Melted wax rim top detail */}
+                <ellipse
+                  cx={pos.x}
+                  cy={pos.y - pos.height + 1.5}
+                  rx="4"
+                  ry="1.8"
+                  fill="#fffbeb"
+                  opacity="0.9"
                 />
                 {/* Spiral golden glitter stripe */}
                 <line
@@ -309,56 +494,326 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
                   x1={pos.x}
                   y1={pos.y - pos.height}
                   x2={pos.x}
-                  y2={pos.y - pos.height - 7}
-                  stroke="#475569"
-                  strokeWidth="1.4"
+                  y2={pos.y - pos.height - 8}
+                  stroke={isLit ? '#78350f' : '#475569'}
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
                 />
 
-                {/* FLAME or SMOKE */}
-                {isLit ? (
-                  <g transform={`translate(${pos.x}, ${pos.y - pos.height - 10})`}>
-                    {/* Pulsing Light Aura */}
-                    <circle
-                      cx="0"
-                      cy="-12"
-                      r="22"
-                      fill="#fef08a"
-                      opacity="0.25"
-                      className="animate-pulse"
-                    />
+                {/* LIT FLAME WITH WIND BENDING OR POST-EXTINGUISH RISING SMOKE */}
+                <g transform={`translate(${origin.x}, ${origin.y})`}>
+                  <AnimatePresence>
+                    {isLit && (
+                      <motion.g
+                        key={`flame-${idx}`}
+                        initial={{ opacity: 0, scale: 0.7 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{
+                          opacity: 0,
+                          scale: 0.15,
+                          transition: { duration: shouldReduceMotion ? 0.14 : 0.18, ease: 'easeIn' },
+                        }}
+                        style={{ transformBox: 'fill-box', transformOrigin: '50% 100%' }}
+                      >
+                        {/* Soft Warm Ambient Halo */}
+                        <circle
+                          cx="0"
+                          cy="-15"
+                          r="32"
+                          fill="url(#flameGlowAura)"
+                          className={shouldReduceMotion ? '' : 'candle-halo-breathe'}
+                          style={
+                            {
+                              '--flame-dur': `${flicker.durationSec + 0.35}s`,
+                              '--flame-delay': `${flicker.delaySec}s`,
+                            } as React.CSSProperties
+                          }
+                        />
 
-                    {/* Outer Teardrop Flame */}
-                    <path
-                      d="M0 -30 C8 -22, 10 -10, 0 0 C-10 -10, -8 -22, 0 -30 Z"
-                      fill="url(#flameInner)"
-                      style={{
-                        transformOrigin: '0 0',
-                        animation: `pulseGlow ${1.8 + idx * 0.2}s ease-in-out infinite`,
-                        filter: 'drop-shadow(0 0 8px rgba(253, 224, 71, 0.9))',
-                      }}
-                    />
+                        {/* Dynamic Wind-Responsive Flame Pivot (anchored at wick base 50% 100%) */}
+                        <motion.g
+                          animate={
+                            isBending
+                              ? shouldReduceMotion
+                                ? { rotate: 8, scaleY: 0.84, opacity: 0.7 }
+                                : {
+                                    rotate: [
+                                      flicker.tiltAngleDeg * 0.6,
+                                      flicker.tiltAngleDeg,
+                                      flicker.tiltAngleDeg - 7,
+                                      flicker.tiltAngleDeg + 8,
+                                    ],
+                                    skewX: [-10, -18, -14, -20],
+                                    scaleX: [0.95, 0.88, 0.9, 0.82],
+                                    scaleY: [0.88, 0.74, 0.78, 0.65],
+                                  }
+                              : {
+                                  rotate: 0,
+                                  skewX: 0,
+                                  scaleX: 1,
+                                  scaleY: 1,
+                                  opacity: 1,
+                                }
+                          }
+                          exit={
+                            shouldReduceMotion
+                              ? { opacity: 0, scale: 0.4 }
+                              : {
+                                  rotate: flicker.tiltAngleDeg + 14,
+                                  skewX: -22,
+                                  scaleX: 0.35,
+                                  scaleY: 0.15,
+                                  opacity: 0,
+                                }
+                          }
+                          transition={{
+                            duration: isBending ? 0.28 : 0.25,
+                            ease: 'easeOut',
+                          }}
+                          style={{ transformBox: 'fill-box', transformOrigin: '50% 100%' }}
+                        >
+                          <g
+                            className={
+                              shouldReduceMotion || isBending ? '' : 'candle-flame-dance'
+                            }
+                            style={
+                              {
+                                '--flame-dur': `${flicker.durationSec}s`,
+                                '--flame-delay': `${flicker.delaySec}s`,
+                              } as React.CSSProperties
+                            }
+                          >
+                            {/* Outer Amber Flame Envelope */}
+                            <path
+                              d="M0 -35 C10 -24, 11 -10, 0 2 C-11 -10, -10 -24, 0 -35 Z"
+                              fill="url(#flameOuter)"
+                              opacity="0.82"
+                            />
+                            {/* Mid Golden Teardrop Flame */}
+                            <path
+                              d="M0 -29 C7.5 -20, 9 -8.5, 0 0 C-9 -8.5, -7.5 -20, 0 -29 Z"
+                              fill="url(#flameInner)"
+                              style={{
+                                filter: 'drop-shadow(0 0 8px rgba(253, 224, 71, 0.9))',
+                              }}
+                            />
+                            {/* Incandescent Inner Core + Blue Wick Base */}
+                            <ellipse cx="0" cy="-6" rx="3.1" ry="6.5" fill="#ffffff" opacity="0.95" />
+                            <circle cx="0" cy="-1.2" r="2.1" fill="#dbeafe" opacity="0.6" />
+                          </g>
+                        </motion.g>
+                      </motion.g>
+                    )}
+                  </AnimatePresence>
 
-                    {/* Inner Intense Core */}
-                    <ellipse cx="0" cy="-6" rx="3.5" ry="7" fill="#ffffff" opacity="0.9" />
-                  </g>
-                ) : (
-                  /* Curling Wisps of Smoke */
-                  <g transform={`translate(${pos.x}, ${pos.y - pos.height - 10})`}>
-                    <path
-                      d="M0 0 C4 -10, -6 -20, 2 -32 C8 -42, -2 -50, 4 -62"
-                      fill="none"
-                      stroke="rgba(226, 232, 240, 0.6)"
-                      strokeWidth="1.4"
-                      strokeLinecap="round"
-                      strokeDasharray="4 2"
-                      className="animate-pulse"
-                    />
-                    <circle cx="2" cy="-35" r="2" fill="#fef08a" opacity="0.7" />
-                  </g>
-                )}
+                  {/* RISING CURLING SMOKE WISPS + COOLING EMBER AFTER EXTINGUISH */}
+                  <AnimatePresence>
+                    {!isLit && isSmoking && (
+                      <motion.g
+                        key={`smoke-${idx}`}
+                        data-testid={`candle-smoke-${idx}`}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0, transition: { duration: 0.3 } }}
+                        className="pointer-events-none"
+                      >
+                        {/* Cooling glowing ember at wick tip */}
+                        <motion.circle
+                          cx="0"
+                          cy="2"
+                          r="2.6"
+                          fill="#fb923c"
+                          initial={{ opacity: 0.95, scale: 1.25 }}
+                          animate={{ opacity: 0, scale: 0.35 }}
+                          transition={{ duration: shouldReduceMotion ? 0.35 : 0.7 }}
+                          style={{ transformBox: 'fill-box', transformOrigin: '50% 50%' }}
+                        />
+
+                        {shouldReduceMotion ? (
+                          <motion.path
+                            d="M0 0 C4 -14, -4 -28, 2 -42"
+                            fill="none"
+                            stroke="url(#smokeGrad)"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: [0, 0.6, 0] }}
+                            transition={{ duration: 0.85, ease: 'easeOut' }}
+                          />
+                        ) : (
+                          <>
+                            {/* Primary curling smoke ribbon */}
+                            <motion.path
+                              d="M0 1 C7 -14, -10 -29, 5 -46 C15 -60, -5 -74, 7 -92"
+                              fill="none"
+                              stroke="url(#smokeGrad)"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              initial={{ pathLength: 0.08, opacity: 0, y: 4, x: 0 }}
+                              animate={{
+                                pathLength: [0.08, 0.85, 1],
+                                opacity: [0, 0.8, 0.45, 0],
+                                y: [4, -14, -34],
+                                x: [0, 7, 15],
+                              }}
+                              transition={{ duration: 2.25, ease: 'easeOut' }}
+                            />
+
+                            {/* Secondary swirling smoke trail */}
+                            <motion.path
+                              d="M-1 -2 C-8 -16, 9 -28, -2 -44 C-10 -57, 7 -70, -2 -84"
+                              fill="none"
+                              stroke="rgba(226, 232, 240, 0.52)"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                              initial={{ pathLength: 0.05, opacity: 0, y: 2, x: 0 }}
+                              animate={{
+                                pathLength: [0.05, 0.8, 1],
+                                opacity: [0, 0.58, 0.25, 0],
+                                y: [2, -16, -30],
+                                x: [0, 4, 11],
+                              }}
+                              transition={{ duration: 2.05, delay: 0.14, ease: 'easeOut' }}
+                            />
+
+                            {/* Soft expanding smoke puff */}
+                            <motion.circle
+                              cx="2"
+                              cy="-10"
+                              r="6.5"
+                              fill="rgba(226, 232, 240, 0.34)"
+                              initial={{ scale: 0.5, opacity: 0, y: 0, x: 0 }}
+                              animate={{
+                                scale: [0.5, 1.4, 2.2],
+                                opacity: [0, 0.45, 0],
+                                y: [0, -28, -56],
+                                x: [0, 8, 16],
+                              }}
+                              transition={{ duration: 1.9, ease: 'easeOut' }}
+                              style={{ transformBox: 'fill-box', transformOrigin: '50% 50%' }}
+                            />
+
+                            {/* Tiny departing ember spark */}
+                            <motion.circle
+                              cx="3"
+                              cy="-4"
+                              r="1.6"
+                              fill="#fde047"
+                              initial={{ opacity: 0.9, x: 0, y: 0, scale: 1 }}
+                              animate={{ opacity: 0, x: 24, y: -22, scale: 0.2 }}
+                              transition={{ duration: 0.55, ease: 'easeOut' }}
+                              style={{ transformBox: 'fill-box', transformOrigin: '50% 50%' }}
+                            />
+                          </>
+                        )}
+                      </motion.g>
+                    )}
+                  </AnimatePresence>
+                </g>
               </g>
             );
           })}
+
+          {/* VISIBLE BREATH STREAM & AIR PARTICLES OVERLAY WHEN BLOWING */}
+          <AnimatePresence>
+            {isBlowing && !shouldReduceMotion && (
+              <motion.g
+                key={`wind-gust-${blowCycle}`}
+                data-testid="breath-wind-gust"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.22 } }}
+                className="pointer-events-none"
+              >
+                {/* Soft atmospheric air veil sweeping across candle line */}
+                <motion.path
+                  d="M20 278 C165 256, 345 242, 650 232 C495 268, 285 288, 30 302 Z"
+                  fill="url(#windVeilGrad)"
+                  initial={{ x: -120, opacity: 0 }}
+                  animate={{ x: [-110, 45, 115], opacity: [0, 0.85, 0] }}
+                  transition={{ duration: 0.92, ease: 'easeOut' }}
+                />
+
+                {/* Flowing aerodynamic breath streamlines */}
+                <motion.path
+                  d="M42 278 C165 258, 285 252, 415 242 C510 235, 585 224, 658 214"
+                  fill="none"
+                  stroke="url(#windStreamGrad)"
+                  strokeWidth="3.2"
+                  strokeLinecap="round"
+                  initial={{ pathLength: 0, pathOffset: 0, opacity: 0 }}
+                  animate={{
+                    pathLength: [0.15, 0.55, 0.2],
+                    pathOffset: [0, 0.35, 0.85],
+                    opacity: [0, 0.92, 0],
+                  }}
+                  transition={{ duration: 0.88, ease: 'easeOut' }}
+                />
+
+                <motion.path
+                  d="M58 256 C185 246, 305 244, 430 234 C520 227, 595 238, 652 246"
+                  fill="none"
+                  stroke="url(#windStreamGrad)"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  initial={{ pathLength: 0, pathOffset: 0, opacity: 0 }}
+                  animate={{
+                    pathLength: [0.12, 0.5, 0.18],
+                    pathOffset: [0, 0.4, 0.88],
+                    opacity: [0, 0.85, 0],
+                  }}
+                  transition={{ duration: 0.85, delay: 0.08, ease: 'easeOut' }}
+                />
+
+                <motion.path
+                  d="M72 296 C190 282, 310 272, 435 262 C525 255, 595 252, 648 242"
+                  fill="none"
+                  stroke="url(#windStreamGrad)"
+                  strokeWidth="2.1"
+                  strokeLinecap="round"
+                  initial={{ pathLength: 0, pathOffset: 0, opacity: 0 }}
+                  animate={{
+                    pathLength: [0.12, 0.48, 0.16],
+                    pathOffset: [0, 0.38, 0.86],
+                    opacity: [0, 0.78, 0],
+                  }}
+                  transition={{ duration: 0.82, delay: 0.14, ease: 'easeOut' }}
+                />
+
+                {/* Glowing breath & stardust droplets carried by the wind */}
+                {WIND_PARTICLES.map((particle) => {
+                  const fill =
+                    particle.tone === 'gold'
+                      ? '#fef08a'
+                      : particle.tone === 'cyan'
+                        ? '#bae6fd'
+                        : '#ffffff';
+
+                  return (
+                    <motion.circle
+                      key={`wind-p-${particle.id}`}
+                      cx={particle.startX}
+                      cy={particle.startY}
+                      r={particle.r}
+                      fill={fill}
+                      initial={{ opacity: 0, x: 0, y: 0, scale: 0.6 }}
+                      animate={{
+                        opacity: [0, 0.95, 0.7, 0],
+                        x: [0, (particle.endX - particle.startX) * 0.55, particle.endX - particle.startX],
+                        y: [0, -10, particle.endY - particle.startY],
+                        scale: [0.6, 1.15, 0.45],
+                      }}
+                      transition={{
+                        duration: particle.duration,
+                        delay: particle.delay,
+                        ease: 'easeOut',
+                      }}
+                    />
+                  );
+                })}
+              </motion.g>
+            )}
+          </AnimatePresence>
         </svg>
       </div>
 
@@ -367,12 +822,22 @@ export const BirthdayCakeScene: React.FC<BirthdayCakeSceneProps> = ({ onContinue
         {!allExtinguished ? (
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-1">
             <button
+              type="button"
+              data-testid="blow-candles-btn"
               onClick={handleBlowAll}
               disabled={isBlowing}
-              className="group inline-flex items-center gap-3 px-8 py-3 rounded-full font-serif text-base sm:text-lg font-medium text-slate-950 bg-gradient-to-r from-amber-100 via-amber-200 to-amber-100 shadow-[0_0_25px_rgba(253,224,71,0.5)] hover:shadow-[0_0_35px_rgba(253,224,71,0.8)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
+              className={`group inline-flex items-center gap-3 px-8 py-3 rounded-full font-serif text-base sm:text-lg font-medium text-slate-950 bg-gradient-to-r from-amber-100 via-amber-200 to-amber-100 shadow-[0_0_25px_rgba(253,224,71,0.5)] transition-all duration-300 ${
+                isBlowing
+                  ? 'opacity-80 scale-95 cursor-wait'
+                  : 'hover:shadow-[0_0_35px_rgba(253,224,71,0.8)] hover:scale-105 active:scale-95 cursor-pointer'
+              }`}
             >
-              <Wind className="w-5 h-5 text-amber-800 transition-transform group-hover:rotate-12" />
-              <span>أطفئي الشموع 🕯️💨</span>
+              <Wind
+                className={`w-5 h-5 text-amber-800 transition-transform ${
+                  isBlowing ? 'translate-x-1 rotate-12' : 'group-hover:rotate-12'
+                }`}
+              />
+              <span>{isBlowing ? 'جاري إطفاء الشموع... ✨' : 'أطفئي الشموع 🕯️💨'}</span>
             </button>
 
             <span className="text-[11px] text-slate-400 font-light">
