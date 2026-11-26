@@ -20,6 +20,15 @@ import {
   BIRTHDAY_SONG_TOTAL_DURATION,
   getBirthdaySongVerses,
 } from '../utils/videoHelpers';
+import {
+  AutoFullscreenStatus,
+  FullscreenAttemptOutcome,
+  enterNativeFullscreen,
+  exitNativeFullscreen,
+  getFullscreenPromptCopy,
+  isFullscreenActive,
+  shouldAttemptAutoFullscreen,
+} from '../utils/fullscreenHelpers';
 
 interface BirthdayVideoSceneProps {
   onPauseAmbientMusic: () => void;
@@ -45,6 +54,8 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   const [videoLoadError, setVideoLoadError] = useState<boolean>(false);
   const [isNativeFullscreen, setIsNativeFullscreen] = useState<boolean>(false);
   const [isTheaterExpanded, setIsTheaterExpanded] = useState<boolean>(false);
+  const [autoFullscreenStatus, setAutoFullscreenStatus] =
+    useState<AutoFullscreenStatus>('idle');
 
   // Built-in musical video state
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -54,6 +65,7 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const autoFullscreenPromiseRef = useRef<Promise<FullscreenAttemptOutcome> | null>(null);
   const onPauseAmbientMusicRef = useRef(onPauseAmbientMusic);
   onPauseAmbientMusicRef.current = onPauseAmbientMusic;
   const rafRef = useRef<number | null>(null);
@@ -79,18 +91,38 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
 
   // Sync fullscreen state across standard, webkit, and iOS video fullscreen events
   useEffect(() => {
+    const doc = document as Document & {
+      webkitFullscreenEnabled?: boolean;
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => Promise<void> | void;
+    };
+    const videoEl = videoRef.current as (HTMLVideoElement & {
+      webkitEnterFullscreen?: () => void;
+      webkitExitFullscreen?: () => void;
+      webkitDisplayingFullscreen?: boolean;
+    }) | null;
+
     const syncFullscreen = () => {
-      const doc = document as Document & { webkitFullscreenElement?: Element | null };
-      const fsActive = Boolean(document.fullscreenElement || doc.webkitFullscreenElement);
+      const fsActive = isFullscreenActive(doc, videoEl);
       setIsNativeFullscreen(fsActive);
-      if (!fsActive) {
+      if (fsActive) {
+        setAutoFullscreenStatus('active');
+      } else {
         setIsTheaterExpanded(false);
+        setAutoFullscreenStatus((prev) =>
+          prev === 'active' || prev === 'attempting' ? 'exited' : prev
+        );
       }
     };
 
-    const videoEl = videoRef.current;
-    const handleWebkitBegin = () => setIsNativeFullscreen(true);
-    const handleWebkitEnd = () => setIsNativeFullscreen(false);
+    const handleWebkitBegin = () => {
+      setIsNativeFullscreen(true);
+      setAutoFullscreenStatus('active');
+    };
+    const handleWebkitEnd = () => {
+      setIsNativeFullscreen(false);
+      setAutoFullscreenStatus((prev) => (prev === 'active' ? 'exited' : prev));
+    };
 
     document.addEventListener('fullscreenchange', syncFullscreen);
     document.addEventListener('webkitfullscreenchange', syncFullscreen);
@@ -102,8 +134,62 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
       document.removeEventListener('webkitfullscreenchange', syncFullscreen);
       videoEl?.removeEventListener('webkitbeginfullscreen', handleWebkitBegin);
       videoEl?.removeEventListener('webkitendfullscreen', handleWebkitEnd);
+
+      // Clean up any active native or expanded fullscreen state when leaving Chapter 7
+      setIsNativeFullscreen(false);
+      setIsTheaterExpanded(false);
+      if (isFullscreenActive(doc, videoEl)) {
+        void exitNativeFullscreen({ doc, video: videoEl });
+      }
     };
   }, [activeVideoParsed.type, activeVideoParsed.src]);
+
+  // Automatically attempt native browser fullscreen once when entering Chapter 7
+  useEffect(() => {
+    const canStartNewAttempt = shouldAttemptAutoFullscreen({
+      isVideoAvailable: isCustomVideoActive,
+      hasAttempted: autoFullscreenPromiseRef.current !== null,
+    });
+
+    if (!isCustomVideoActive) {
+      return;
+    }
+
+    if (canStartNewAttempt) {
+      setAutoFullscreenStatus('attempting');
+      autoFullscreenPromiseRef.current = enterNativeFullscreen({
+        container: playerContainerRef.current,
+        video: videoRef.current,
+        doc: document as Document & {
+          webkitFullscreenEnabled?: boolean;
+          webkitFullscreenElement?: Element | null;
+        },
+        allowIosVideo: false,
+      });
+    }
+
+    const attemptPromise = autoFullscreenPromiseRef.current;
+    if (!attemptPromise) return;
+
+    let cancelled = false;
+    attemptPromise.then((outcome) => {
+      if (cancelled) return;
+
+      if (outcome === 'entered' || outcome === 'already-active') {
+        setIsNativeFullscreen(true);
+        setAutoFullscreenStatus('active');
+      } else if (outcome === 'unsupported') {
+        // Stay gracefully inside inline Chapter 7 layout (do not force theater overlay on auto-entry)
+        setAutoFullscreenStatus('unsupported');
+      } else {
+        setAutoFullscreenStatus('blocked');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCustomVideoActive]);
 
   // Allow Escape key to close the theater-mode fallback
   useEffect(() => {
@@ -111,6 +197,7 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsTheaterExpanded(false);
+        setAutoFullscreenStatus('exited');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -139,28 +226,25 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
       }
     }
 
-    const container = playerContainerRef.current as (HTMLDivElement & {
-      webkitRequestFullscreen?: () => Promise<void> | void;
-    }) | null;
+    const outcome = await enterNativeFullscreen({
+      container: playerContainerRef.current,
+      video: videoEl,
+      doc: document as Document & {
+        webkitFullscreenEnabled?: boolean;
+        webkitFullscreenElement?: Element | null;
+      },
+      allowIosVideo: true,
+    });
 
-    try {
-      if (container?.requestFullscreen) {
-        await container.requestFullscreen();
-        return;
-      }
-      if (container?.webkitRequestFullscreen) {
-        await container.webkitRequestFullscreen();
-        return;
-      }
-      if (videoEl?.webkitEnterFullscreen) {
-        videoEl.webkitEnterFullscreen();
-        return;
-      }
-    } catch {
-      // Fall back cleanly to expanded in-page theater view
+    if (outcome === 'entered' || outcome === 'already-active') {
+      setIsNativeFullscreen(true);
+      setAutoFullscreenStatus('active');
+      return;
     }
 
+    // Manual button click fallback: expand clean in-page cinema theater view
     setIsTheaterExpanded(true);
+    setAutoFullscreenStatus('active');
   };
 
   const handleExitFullscreen = async () => {
@@ -172,20 +256,10 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
       webkitExitFullscreen?: () => void;
     }) | null;
 
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else if (doc.webkitFullscreenElement && doc.webkitExitFullscreen) {
-        await doc.webkitExitFullscreen();
-      } else if (videoEl?.webkitExitFullscreen) {
-        videoEl.webkitExitFullscreen();
-      }
-    } catch {
-      // Ignore exit errors
-    } finally {
-      setIsNativeFullscreen(false);
-      setIsTheaterExpanded(false);
-    }
+    await exitNativeFullscreen({ doc, video: videoEl });
+    setIsNativeFullscreen(false);
+    setIsTheaterExpanded(false);
+    setAutoFullscreenStatus('exited');
   };
 
   // Autoplay direct video with sound; gracefully fall back to muted autoplay or manual play if blocked
@@ -622,6 +696,7 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
     100,
     (currentTime / BIRTHDAY_SONG_TOTAL_DURATION) * 100
   );
+  const fullscreenPrompt = getFullscreenPromptCopy(autoFullscreenStatus);
 
   return (
     <div
@@ -658,14 +733,19 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
 
           {/* Fullscreen recommendation & prominent CTA */}
           {isCustomVideoActive && (
-            <div className="mt-3 flex flex-col sm:flex-row items-center justify-center gap-2.5 px-4 py-2 rounded-2xl bg-amber-400/10 border border-amber-300/25 shadow-[0_0_25px_rgba(253,224,71,0.12)]">
+            <div
+              data-testid="fullscreen-fallback-prompt"
+              data-fullscreen-status={autoFullscreenStatus}
+              className="mt-3 flex flex-col sm:flex-row items-center justify-center gap-2.5 px-4 py-2 rounded-2xl bg-amber-400/10 border border-amber-300/25 shadow-[0_0_25px_rgba(253,224,71,0.12)]"
+            >
               <p className="text-xs sm:text-sm text-amber-100/95 font-serif flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0 animate-pulse" />
-                <span>ننصحك بتكبير الشاشة لمشاهدة المفاجأة بأجمل جودة ❤️</span>
+                <span>{fullscreenPrompt.message}</span>
               </p>
 
               <button
                 type="button"
+                data-testid="fullscreen-toggle-btn"
                 onClick={isExpandedView ? handleExitFullscreen : handleEnterFullscreen}
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full font-serif text-xs sm:text-sm font-medium text-slate-950 bg-gradient-to-r from-amber-100 via-amber-200 to-amber-100 shadow-[0_0_18px_rgba(253,224,71,0.45)] hover:shadow-[0_0_26px_rgba(253,224,71,0.75)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
               >
@@ -677,7 +757,7 @@ export const BirthdayVideoScene: React.FC<BirthdayVideoSceneProps> = ({
                 ) : (
                   <>
                     <Maximize2 className="w-3.5 h-3.5 text-amber-900" />
-                    <span>مشاهدة بملء الشاشة ✨</span>
+                    <span>{fullscreenPrompt.buttonLabel}</span>
                   </>
                 )}
               </button>

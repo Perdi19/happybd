@@ -16,6 +16,7 @@ import { WishesScene } from './components/WishesScene';
 import { LetterScene } from './components/LetterScene';
 import { BirthdayVideoScene } from './components/BirthdayVideoScene';
 import { audioEngine } from './utils/audioEngine';
+import { exitNativeFullscreen, isFullscreenActive } from './utils/fullscreenHelpers';
 import midnightGardenBg from './assets/images/midnight_garden_fairytale_1792848341183.jpg';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -74,15 +75,20 @@ export default function App() {
     }
   }, []);
 
-  // Restore background Happy Birthday piano when leaving Chapter 7 if it was playing beforehand
+  // Restore background Happy Birthday piano and clean up fullscreen when leaving Chapter 7
   useEffect(() => {
     const prev = prevChapterRef.current;
     prevChapterRef.current = currentChapter;
 
-    if (prev === 7 && currentChapter !== 7 && shouldRestoreMusicRef.current) {
-      shouldRestoreMusicRef.current = false;
-      audioEngine.startMelody();
-      setIsMusicPlaying(audioEngine.getMelodyPlaying());
+    if (prev === 7 && currentChapter !== 7) {
+      if (isFullscreenActive(document)) {
+        void exitNativeFullscreen({ doc: document });
+      }
+      if (shouldRestoreMusicRef.current) {
+        shouldRestoreMusicRef.current = false;
+        audioEngine.startMelody();
+        setIsMusicPlaying(audioEngine.getMelodyPlaying());
+      }
     }
   }, [currentChapter]);
 
@@ -211,8 +217,8 @@ export default function App() {
                 key="chapter-6"
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.7 }}
+                exit={{ opacity: 0, transition: { duration: 0.2 } }}
+                transition={{ duration: 0.6 }}
               >
                 <LetterScene
                   onGoToVideo={() => advanceToChapter(7)}
@@ -227,8 +233,8 @@ export default function App() {
                 key="chapter-7"
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.7 }}
+                exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                transition={{ duration: 0.6 }}
               >
                 <BirthdayVideoScene
                   onPauseAmbientMusic={handlePauseMusic}
